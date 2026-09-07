@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>石头与光 · 程序化哥特大教堂</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1a1e; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 18px; left: 22px; color: #f2ead8;
+    font-family: "Noto Serif CJK SC", "Songti SC", serif;
+    text-shadow: 0 1px 6px rgba(0,0,0,.6); pointer-events: none;
+  }
+  #hud h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: 2px; }
+  #hud p { font-size: 12.5px; margin: 0; opacity: .85; font-family: system-ui, sans-serif; }
+  #help {
+    position: fixed; bottom: 18px; left: 22px; color: #efe7d6;
+    background: rgba(20,16,12,.6); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,240,210,.25); border-radius: 10px;
+    padding: 12px 16px; font: 12.5px/1.9 system-ui, sans-serif;
+  }
+  #help.hidden { display: none; }
+  #help b { color: #ffd98f; font-weight: 600; }
+  #toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    color: #fff4dd; background: rgba(20,16,12,.72); border-radius: 999px;
+    padding: 8px 22px; font: 14px system-ui, sans-serif; opacity: 0;
+    transition: opacity .35s; pointer-events: none;
+    border: 1px solid rgba(255,240,210,.3);
+  }
+  #toast.show { opacity: 1; }
+  #loading {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    color: #d8cdb4; background: #1a1a1e; font: 15px system-ui, sans-serif;
+    letter-spacing: 3px; z-index: 10;
+  }
+  #panel {
+    position: fixed; top: 18px; right: 22px; width: 250px;
+    color: #efe7d6; background: rgba(20,16,12,.72); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,240,210,.25); border-radius: 12px;
+    padding: 14px 16px 10px; font: 12.5px/1.7 system-ui, sans-serif;
+  }
+  #panel.hidden, #timeline.hidden { display: none; }
+  #panel h4 {
+    margin: 4px 0 6px; font-size: 12px; letter-spacing: .18em;
+    color: #ffd98f; font-weight: 600;
+  }
+  #panel h4 small { color: rgba(239,231,214,.55); letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+  #panel .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  #panel .row label { flex: 0 0 58px; }
+  #panel .row span { flex: 0 0 56px; text-align: right; font-variant-numeric: tabular-nums; color: #ffd98f; }
+  #panel input[type=range] { flex: 1; accent-color: #c9a24f; min-width: 0; }
+  #panel .apex { margin: 8px 0 2px; color: rgba(239,231,214,.75); }
+  #panel .warn { margin: 6px 0 2px; color: #ff9b8a; }
+  #panel .warn.hidden { display: none; }
+  #timeline {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 12px; width: min(620px, 86vw);
+    color: #efe7d6; background: rgba(20,16,12,.72); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,240,210,.25); border-radius: 999px;
+    padding: 10px 18px; font: 13px system-ui, sans-serif;
+  }
+  #timeline button {
+    background: none; border: none; color: #ffd98f; font-size: 16px;
+    cursor: pointer; padding: 0 2px;
+  }
+  #timeline input[type=range] { flex: 1; accent-color: #c9a24f; min-width: 0; }
+  #timeline span { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="loading">正在砌筑石头与光……</div>
+<div id="hud">
+  <h1>石头与光</h1>
+  <p>程序化哥特大教堂 · 尖拱 / 肋拱顶 / 飞扶壁</p>
+</div>
+<div id="help">
+  <b>拖动</b> 环视 &nbsp; <b>滚轮</b> 远近 &nbsp; <b>右键拖</b> 平移<br>
+  <b>1–6</b> 视角书签：全景 / 西立面 / 中厅 / 拱顶 / 飞扶壁 / 后殿<br>
+  <b>B</b> 建造过程 &nbsp; <b>F</b> 第一人称行走 &nbsp; <b>P</b> 设计与光面板<br>
+  <b>C</b> 剖面切换 &nbsp; <b>L</b> 结构标注 &nbsp; <b>H</b> 收起帮助
+</div>
+<div id="toast"></div>
+<div id="panel" class="hidden">
+  <h4>光 · 时刻</h4>
+  <div class="row">
+    <input type="range" id="sunT" min="0" max="1" step="0.01" value="0.42">
+    <span id="sunLabel">12:00</span>
+  </div>
+  <h4>设计参数 <small>改动即重建</small></h4>
+  <div class="row"><label>中厅开间</label><input type="range" id="pBays" min="3" max="8" step="1"><span id="pBaysVal"></span></div>
+  <div class="row"><label>起拱高</label><input type="range" id="pSpring" min="12" max="26" step="0.5"><span id="pSpringVal"></span></div>
+  <div class="row"><label>尖拱曲率</label><input type="range" id="pArcK" min="1" max="1.8" step="0.05"><span id="pArcKVal"></span></div>
+  <div class="row"><label>西塔高</label><input type="range" id="pTower" min="30" max="60" step="1"><span id="pTowerVal"></span></div>
+  <p id="apexVal" class="apex"></p>
+  <p id="beauvaisWarn" class="warn hidden">⚠ 已进入博韦区间——1284 年，这样的野心塌了。</p>
+</div>
+<div id="timeline" class="hidden">
+  <button id="playBtn" aria-label="播放 / 暂停">⏸</button>
+  <input type="range" id="buildT" min="0" max="1" step="0.002" value="0" aria-label="建造进度">
+  <span id="phaseName">放线与地坪</span>
+</div>
+<script type="importmap">
+  { "imports": { "three": "./lib/three.module.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
