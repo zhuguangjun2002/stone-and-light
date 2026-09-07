@@ -127,6 +127,32 @@
     margin: 0; font: 14.5px/1.9 "Noto Serif CJK SC", "Songti SC", serif;
     color: rgba(242,234,216,.92);
   }
+  #ctrlbar {
+    position: fixed; right: 14px; bottom: 20px; z-index: 4;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  #ctrlbar button {
+    background: rgba(20,16,12,.66); color: #efe7d6;
+    border: 1px solid rgba(255,240,210,.3); border-radius: 999px;
+    padding: 6px 13px; font: 12.5px system-ui, sans-serif;
+    cursor: pointer; backdrop-filter: blur(6px); letter-spacing: .1em;
+  }
+  #ctrlbar button:hover { border-color: #ffd98f; color: #ffd98f; }
+  body.touring #ctrlbar button { display: none; }
+  body.touring #ctrlbar button[data-act="tour"],
+  body.touring #ctrlbar button[data-act="mute"] { display: block; }
+  @media (max-width: 760px) {
+    #help { display: none; }
+    #hud h1 { font-size: 17px; }
+    #hud p { font-size: 11px; }
+    #panel { width: min(240px, 76vw); top: 10px; right: 10px; padding: 10px 12px 8px; }
+    #presetCard { width: min(300px, 82vw); left: 10px; top: 76px; }
+    #timeline { padding: 8px 12px; gap: 8px; bottom: 16px; width: 88vw; }
+    #timeline #phaseName { display: none; }
+    #ctrlbar { bottom: 78px; }
+    #subtitle h3 { font-size: 16px; }
+    #subtitle p.txt { font-size: 12.5px; }
+  }
 </style>
 </head>
 <body>
@@ -174,6 +200,16 @@
   <div class="row"><label>西塔高</label><input type="range" id="pTower" min="30" max="60" step="1"><span id="pTowerVal"></span></div>
   <p id="apexVal" class="apex"></p>
   <p id="beauvaisWarn" class="warn hidden">⚠ 已进入博韦区间——1284 年，这样的野心塌了。</p>
+</div>
+<div id="ctrlbar">
+  <button data-act="tour">导览</button>
+  <button data-act="build">建造</button>
+  <button data-act="walk">行走</button>
+  <button data-act="section">剖面</button>
+  <button data-act="labels">标注</button>
+  <button data-act="panel">设计</button>
+  <button data-act="bell">钟</button>
+  <button data-act="mute">静音</button>
 </div>
 <div id="timeline" class="hidden">
   <button id="playBtn" aria-label="播放 / 暂停">⏸</button>

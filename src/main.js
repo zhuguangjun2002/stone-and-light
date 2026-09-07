@@ -414,6 +414,7 @@ function startShot(i) {
 function setTour(on, { keepTime = false } = {}) {
   if (on === tour.active) return;
   tour.active = on;
+  document.body.classList.toggle('touring', on);
   const cine = document.getElementById('cine');
   if (on) {
     if (walk.active) setWalk(false);
@@ -590,44 +591,63 @@ function wirePanel() {
   });
 }
 
+// 统一动作入口：键盘与屏幕按钮共用（触屏设备没有键盘）
+function doAction(name) {
+  audio.ensure();
+  // 导览中只允许：退出导览、声音
+  if (tour.active && !['tour', 'bell', 'mute'].includes(name)) return;
+  switch (name) {
+    case 'tour': setTour(!tour.active); break;
+    case 'build': setBuildActive(!build.active); break;
+    case 'walk': setWalk(!walk.active); break;
+    case 'panel': document.getElementById('panel').classList.toggle('hidden'); break;
+    case 'section':
+      sectionIdx = (sectionIdx + 1) % SECTIONS.length;
+      applySection(SECTIONS[sectionIdx].planes);
+      toast(SECTIONS[sectionIdx].name);
+      break;
+    case 'labels':
+      labelsOn = !labelsOn;
+      labelGroup.visible = labelsOn;
+      updateLabels();
+      toast(labelsOn ? '结构标注：开（随室内 / 室外自动切换）' : '结构标注：关');
+      break;
+    case 'bell': audio.toll(1); break;
+    case 'mute': toast(audio.toggleMute() ? '静音' : '声音开'); break;
+    case 'help': document.getElementById('help').classList.toggle('hidden'); break;
+  }
+}
+
+const KEY_ACTIONS = {
+  t: 'tour', b: 'build', f: 'walk', p: 'panel',
+  c: 'section', l: 'labels', g: 'bell', m: 'mute', h: 'help',
+};
 addEventListener('keydown', (e) => {
   audio.ensure();
   if (e.code.startsWith('Key') || e.code.startsWith('Shift')) walk.keys.add(e.code);
   if (e.repeat) return;
-  // 导览中：仅响应退出 / 下一镜头 / 声音键
   if (tour.active) {
-    if (e.key === 't' || e.key === 'T' || e.key === 'Escape') setTour(false);
-    else if (e.key === 'ArrowRight') {
+    if (e.key === 'Escape') { setTour(false); return; }
+    if (e.key === 'ArrowRight') {
       if (tour.idx < TOUR.length - 1) startShot(tour.idx + 1);
       else { setTour(false, { keepTime: true }); toast('导览结束'); }
-    } else if (e.key === 'g' || e.key === 'G') audio.toll(1);
-    else if (e.key === 'm' || e.key === 'M') toast(audio.toggleMute() ? '静音' : '声音开');
-    return;
+      return;
+    }
   }
-  if (e.key >= '1' && e.key <= '6') flyTo(VIEWS[e.key]);
-  else if (e.key === 't' || e.key === 'T') setTour(true);
-  else if (e.key === 'g' || e.key === 'G') audio.toll(1);
-  else if (e.key === 'm' || e.key === 'M') toast(audio.toggleMute() ? '静音' : '声音开');
-  else if (e.key === 'c' || e.key === 'C') {
-    sectionIdx = (sectionIdx + 1) % SECTIONS.length;
-    applySection(SECTIONS[sectionIdx].planes);
-    toast(SECTIONS[sectionIdx].name);
-  } else if (e.key === 'l' || e.key === 'L') {
-    labelsOn = !labelsOn;
-    labelGroup.visible = labelsOn;
-    updateLabels();
-    toast(labelsOn ? '结构标注：开（随室内 / 室外自动切换）' : '结构标注：关');
-  } else if (e.key === 'b' || e.key === 'B') {
-    setBuildActive(!build.active);
-  } else if (e.key === 'f' || e.key === 'F') {
-    setWalk(!walk.active);
-  } else if (e.key === 'p' || e.key === 'P') {
-    document.getElementById('panel').classList.toggle('hidden');
-  } else if (e.key === 'h' || e.key === 'H') {
-    document.getElementById('help').classList.toggle('hidden');
-  }
+  if (!tour.active && e.key >= '1' && e.key <= '6') flyTo(VIEWS[e.key]);
+  else if (KEY_ACTIONS[e.key.toLowerCase()]) doAction(KEY_ACTIONS[e.key.toLowerCase()]);
 });
 addEventListener('keyup', (e) => walk.keys.delete(e.code));
+
+// 屏幕按钮栏（触屏设备的主要入口；行走模式需要鼠标指针锁定，触屏上隐藏）
+function wireCtrlbar() {
+  const bar = document.getElementById('ctrlbar');
+  const touchOnly = 'ontouchstart' in window;
+  for (const btn of bar.querySelectorAll('button')) {
+    if (touchOnly && btn.dataset.act === 'walk') { btn.remove(); continue; }
+    btn.addEventListener('click', () => doAction(btn.dataset.act));
+  }
+}
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -675,6 +695,7 @@ const presetQ = PRESETS.find((p) => p.key === q.get('preset'));
 if (presetQ) { activePresetKey = presetQ.key; applyPreset(presetQ); }
 mountCathedral();
 wirePanel();
+wireCtrlbar();
 updatePanelReadout();
 if (presetQ) showPresetCard(presetQ);
 setSunTime(q.get('time') != null ? Number(q.get('time')) : 0.42);
@@ -699,6 +720,7 @@ if (q.get('record')) {
   RECORD = true;
   renderer.setPixelRatio(1);
   document.getElementById('loading')?.remove();
+  document.getElementById('ctrlbar').style.display = 'none';   // 成片画面保持干净
   setTour(true);
   window.__tourStep = (dt) => {
     if (tour.active) updateTour(dt);

@@ -221,6 +221,25 @@ export function buildCathedral() {
   root.add(altarCross, altarCrossH);
   labels.push({ text: '祭坛（东向——朝向日出）', pos: [0, 4.5, P.choirZ1 + 3], scope: 'in' });
 
+  // 中厅会众长椅：中线留出走道，全部面向祭坛。建造动画里作为"家具"最后进场。
+  const pewMat = new THREE.MeshStandardMaterial({ color: '#5d4429', roughness: 0.85 });
+  const seatG = new THREE.BoxGeometry(3.8, 0.5, 0.45);
+  const backG = new THREE.BoxGeometry(3.8, 0.55, 0.09);
+  for (const zc of bayCenters) {
+    if (zc < P.naveZ0 + P.bay / 2) continue;      // 只放中厅，歌坛留给唱诗班
+    for (const dz of [-2.1, 0, 2.1]) {
+      for (const sx of [1, -1]) {
+        const seat = new THREE.Mesh(seatG, pewMat);
+        seat.position.set(sx * 2.75, 0.3, zc + dz);
+        seat.userData.buildY = 50;
+        const back = new THREE.Mesh(backG, pewMat);
+        back.position.set(sx * 2.75, 0.82, zc + dz + 0.24);
+        back.userData.buildY = 50;
+        root.add(seat, back);
+      }
+    }
+  }
+
   // ---------- 阳光透窗的光斑与光柱（南侧受光） ----------
   addLightPools(root, bayCenters);
 
