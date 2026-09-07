@@ -7,6 +7,10 @@ import { buildCathedral } from './cathedral.js';
 import { canvasTexture } from './materials.js';
 import { P, recomputeDerived } from './params.js';
 import { archApex } from './gothic.js';
+import { TOUR } from './tour.js';
+import { createWorksite } from './worksite.js';
+import { createAudio } from './audio.js';
+import { PRESETS, applyPreset } from './presets.js';
 
 // ---------- 渲染器与场景 ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -46,8 +50,12 @@ for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
 }
 
 const _c1 = new THREE.Color(), _c2 = new THREE.Color(), _c3 = new THREE.Color();
+let currentSunT = 0.42;
 // t ∈ [0,1] → 7:00 – 19:00。太阳自东（-z）经南（+x）向西（+z）。
 function setSunTime(t) {
+  currentSunT = t;
+  const slider = document.getElementById('sunT');
+  if (slider && Number(slider.value) !== t) slider.value = t;
   const s = Math.sin(Math.PI * t);                       // 高度因子：正午 1，晨昏 0
   const az = Math.PI * t;
   const elev = THREE.MathUtils.degToRad(7 + 56 * s);
@@ -271,6 +279,11 @@ function applySection(planes) {
   }
 }
 
+// ---------- 工地装备与声音 ----------
+const worksite = createWorksite();
+scene.add(worksite.group);
+const audio = createAudio();
+
 // ---------- 建造过程动画 ----------
 const build = { active: false, playing: false, t: 0, dur: 42, lastCount: -1 };
 const PHASE_NAMES = {
@@ -288,8 +301,12 @@ function applyBuild() {
   const n = buildList.length;
   const count = build.active ? Math.round(build.t * n) : n;
   if (count === build.lastCount) return;
+  const prev = build.lastCount;
   for (let i = 0; i < n; i++) buildList[i].visible = i < count;
   build.lastCount = count;
+  // 工地装备跟随施工前沿；完工鸣钟
+  worksite.update(build.active && count < n ? (buildList[count]?.userData.buildRegion ?? null) : null, P);
+  if (build.active && prev !== -1 && prev < n && count >= n) audio.toll(5);
   const ui = document.getElementById('timeline');
   if (build.active && ui) {
     document.getElementById('buildT').value = build.t;
@@ -363,6 +380,93 @@ addEventListener('mousemove', (e) => {
   }
 });
 
+// ---------- 电影导览 ----------
+const tour = { active: false, idx: 0, t: 0, savedTime: 0.42, savedSection: 0 };
+const _tv = new THREE.Vector3();
+function startShot(i) {
+  tour.idx = i;
+  tour.t = 0;
+  const s = TOUR[i];
+  sectionIdx = s.section ?? 0;
+  applySection(SECTIONS[sectionIdx].planes);
+  if (s.time != null) setSunTime(s.time);
+  if (s.buildTo != null) {
+    build.active = true;
+    build.playing = false;
+    build.t = s.buildFrom;
+    build.lastCount = -1;
+    applyBuild();
+  } else if (build.active) {
+    build.active = false;
+    build.lastCount = -1;
+    applyBuild();
+  }
+  const box = document.getElementById('subtitle');
+  box.classList.remove('show');
+  setTimeout(() => {
+    document.getElementById('subTitle').textContent = s.title;
+    document.getElementById('subText').textContent = s.text;
+    document.getElementById('subProg').textContent = `${i + 1} / ${TOUR.length}`;
+    box.classList.add('show');
+  }, 350);
+}
+function setTour(on, { keepTime = false } = {}) {
+  if (on === tour.active) return;
+  tour.active = on;
+  const cine = document.getElementById('cine');
+  if (on) {
+    if (walk.active) setWalk(false);
+    fly = null;
+    tour.savedTime = currentSunT;
+    controls.enabled = false;
+    labelGroup.visible = false;
+    document.getElementById('help').classList.add('hidden');
+    document.getElementById('panel').classList.add('hidden');
+    cine.classList.add('on');
+    audio.ensure();
+    audio.toll(2);
+    startShot(0);
+  } else {
+    cine.classList.remove('on');
+    document.getElementById('subtitle').classList.remove('show');
+    sectionIdx = 0;
+    applySection([]);
+    if (build.active) { build.active = false; build.lastCount = -1; applyBuild(); }
+    if (!keepTime) setSunTime(tour.savedTime);
+    labelGroup.visible = labelsOn;
+    controls.enabled = true;
+    camera.getWorldDirection(_tv);
+    controls.target.copy(camera.position).addScaledVector(_tv, 20);
+  }
+}
+function updateTour(dt) {
+  const s = TOUR[tour.idx];
+  tour.t += dt;
+  const u = Math.min(tour.t / s.dur, 1);
+  const e = u * u * (3 - 2 * u);   // smoothstep：镜头缓入缓出
+  camera.position.set(
+    s.p0[0] + (s.p1[0] - s.p0[0]) * e,
+    s.p0[1] + (s.p1[1] - s.p0[1]) * e,
+    s.p0[2] + (s.p1[2] - s.p0[2]) * e);
+  _tv.set(
+    s.t0[0] + (s.t1[0] - s.t0[0]) * e,
+    s.t0[1] + (s.t1[1] - s.t0[1]) * e,
+    s.t0[2] + (s.t1[2] - s.t0[2]) * e);
+  camera.lookAt(_tv);
+  if (s.buildTo != null) {
+    build.t = s.buildFrom + (s.buildTo - s.buildFrom) * u;
+    applyBuild();
+  }
+  if (u >= 1) {
+    if (tour.idx < TOUR.length - 1) startShot(tour.idx + 1);
+    else {
+      setTour(false, { keepTime: true });   // 停在黄昏
+      audio.toll(3);
+      toast('导览结束——按 T 可再看一遍');
+    }
+  }
+}
+
 // ---------- 视角书签与镜头飞行 ----------
 const VIEWS = {
   1: { pos: [96, 62, 102], tgt: [0, 15, 5], name: '全景 · 东南上空' },
@@ -419,7 +523,30 @@ function updatePanelReadout() {
   document.getElementById('apexVal').textContent = `拱顶顶高 ≈ ${apex.toFixed(1)} m`;
   document.getElementById('beauvaisWarn').classList.toggle('hidden', P.vaultSpring <= 22);
 }
+let activePresetKey = 'proto';
+function selectPreset(preset) {
+  activePresetKey = preset.key;
+  applyPreset(preset);
+  if (build.active) setBuildActive(false);
+  disposeCathedral();
+  mountCathedral();
+  updatePanelReadout();
+  for (const b of document.querySelectorAll('#presets button')) {
+    b.classList.toggle('active', b.dataset.key === preset.key);
+  }
+  toast(`${preset.name} · ${preset.desc}`);
+}
 function wirePanel() {
+  const box = document.getElementById('presets');
+  for (const preset of PRESETS) {
+    const b = document.createElement('button');
+    b.textContent = preset.name;
+    b.dataset.key = preset.key;
+    b.title = preset.desc;
+    if (preset.key === activePresetKey) b.classList.add('active');
+    b.addEventListener('click', () => selectPreset(preset));
+    box.appendChild(b);
+  }
   for (const [, id] of PARAM_SLIDERS) {
     document.getElementById(id).addEventListener('input', () => {
       clearTimeout(rebuildTimer);
@@ -440,9 +567,23 @@ function wirePanel() {
 }
 
 addEventListener('keydown', (e) => {
+  audio.ensure();
   if (e.code.startsWith('Key') || e.code.startsWith('Shift')) walk.keys.add(e.code);
   if (e.repeat) return;
+  // 导览中：仅响应退出 / 下一镜头 / 声音键
+  if (tour.active) {
+    if (e.key === 't' || e.key === 'T' || e.key === 'Escape') setTour(false);
+    else if (e.key === 'ArrowRight') {
+      if (tour.idx < TOUR.length - 1) startShot(tour.idx + 1);
+      else { setTour(false, { keepTime: true }); toast('导览结束'); }
+    } else if (e.key === 'g' || e.key === 'G') audio.toll(1);
+    else if (e.key === 'm' || e.key === 'M') toast(audio.toggleMute() ? '静音' : '声音开');
+    return;
+  }
   if (e.key >= '1' && e.key <= '6') flyTo(VIEWS[e.key]);
+  else if (e.key === 't' || e.key === 'T') setTour(true);
+  else if (e.key === 'g' || e.key === 'G') audio.toll(1);
+  else if (e.key === 'm' || e.key === 'M') toast(audio.toggleMute() ? '静音' : '声音开');
   else if (e.key === 'c' || e.key === 'C') {
     sectionIdx = (sectionIdx + 1) % SECTIONS.length;
     applySection(SECTIONS[sectionIdx].planes);
@@ -484,7 +625,7 @@ function animate() {
     controls.target.lerpVectors(fly.t0, fly.t1, e);
     if (u >= 1) fly = null;
   }
-  if (build.active && build.playing) {
+  if (!tour.active && build.active && build.playing) {
     build.t = Math.min(build.t + dt / build.dur, 1);
     applyBuild();
     if (build.t >= 1) {
@@ -492,8 +633,10 @@ function animate() {
       document.getElementById('playBtn').textContent = '▶';
     }
   }
-  if (walk.active) updateWalk(dt);
+  if (tour.active) updateTour(dt);
+  else if (walk.active) updateWalk(dt);
   else controls.update();
+  audio.setInside(insideCathedral(camera.position));
   updateLabels();
   renderer.render(scene, camera);
   if (firstFrame) {
@@ -503,11 +646,12 @@ function animate() {
 }
 
 // ---------- 启动 ----------
+const q = new URLSearchParams(location.search);
+const presetQ = PRESETS.find((p) => p.key === q.get('preset'));
+if (presetQ) { activePresetKey = presetQ.key; applyPreset(presetQ); }
 mountCathedral();
 wirePanel();
 updatePanelReadout();
-
-const q = new URLSearchParams(location.search);
 setSunTime(q.get('time') != null ? Number(q.get('time')) : 0.42);
 document.getElementById('sunT').value = q.get('time') ?? 0.42;
 if (q.get('section')) {
@@ -524,4 +668,6 @@ if (q.get('build') != null) {
   applyBuild();
 }
 flyTo(VIEWS[q.get('view')] ?? VIEWS[1], 0.01);
+if (q.get('tour')) setTour(true);
+addEventListener('pointerdown', () => audio.ensure());
 animate();

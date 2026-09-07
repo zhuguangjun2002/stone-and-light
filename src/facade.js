@@ -50,19 +50,21 @@ export function portal(a, springY, mats, layers = 3) {
   return grp;
 }
 
-// 一座西塔：方身 + 角撑 + 钟室尖窗 + 八角尖锥 + 角上小尖塔
-export function tower(P, mats) {
+// 一座西塔：方身 + 角撑 + 钟室尖窗，顶部按 P.towerSpires 收成八角尖锥或平顶敞廊。
+// extraH / extraSpire 用于不对称双塔（沙特尔式北塔更高）。
+export function tower(P, mats, extraH = 0, extraSpire = 0) {
   const grp = new THREE.Group();
   const w = P.towerW;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, P.towerH, w), mats.stone);
-  body.position.y = P.towerH / 2;
+  const H = P.towerH + extraH;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, H, w), mats.stone);
+  body.position.y = H / 2;
   body.castShadow = body.receiveShadow = true;
   grp.add(body);
   // 四角扶壁条
-  const cornerG = new THREE.BoxGeometry(1.2, P.towerH * 0.82, 1.2);
+  const cornerG = new THREE.BoxGeometry(1.2, H * 0.82, 1.2);
   for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
     const c = new THREE.Mesh(cornerG, mats.stone);
-    c.position.set(dx * w / 2, P.towerH * 0.41, dz * w / 2);
+    c.position.set(dx * w / 2, H * 0.41, dz * w / 2);
     c.castShadow = true;
     grp.add(c);
   }
@@ -72,11 +74,11 @@ export function tower(P, mats) {
     { cx: w * 0.2, a: 1.1, y0: 1.2, springY: 8.2, k: 1.6 },
   ]);
   const dark = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, 12, w * 0.86), mats.dark);
-  dark.position.y = P.towerH - 7;
+  dark.position.y = H - 7;
   grp.add(dark);
   for (let f = 0; f < 4; f++) {
     const belt = new THREE.Mesh(beltG, mats.stone);
-    belt.position.y = P.towerH - 13;
+    belt.position.y = H - 13;
     belt.rotation.y = (f * Math.PI) / 2;
     const off = w / 2 - 0.2;
     belt.position.x = [0, off, 0, -off][f];
@@ -84,19 +86,31 @@ export function tower(P, mats) {
     belt.castShadow = true;
     grp.add(belt);
   }
-  // 尖锥与角塔
-  const spire = new THREE.Mesh(new THREE.ConeGeometry(w * 0.52, P.spireH, 8), mats.roof);
-  spire.position.y = P.towerH + P.spireH / 2;
-  spire.castShadow = true;
-  grp.add(spire);
+  if (P.towerSpires !== false) {
+    // 尖锥收顶
+    const spireH = P.spireH + extraSpire;
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(w * 0.52, spireH, 8), mats.roof);
+    spire.position.y = H + spireH / 2;
+    spire.castShadow = true;
+    grp.add(spire);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), mats.gold);
+    tip.position.y = H + spireH + 0.2;
+    grp.add(tip);
+  } else {
+    // 平顶敞廊收顶（巴黎圣母院式）：栏杆沿 + 平台
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.9, 1.1, w + 0.9), mats.stoneLight);
+    rim.position.y = H + 0.55;
+    rim.castShadow = true;
+    grp.add(rim);
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 0.5, w * 0.9), mats.stone);
+    deck.position.y = H + 1.1;
+    grp.add(deck);
+  }
   for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
     const pin = makePinnacle(mats.stoneLight, 0.8);
-    pin.position.set(dx * (w / 2 - 0.4), P.towerH, dz * (w / 2 - 0.4));
+    pin.position.set(dx * (w / 2 - 0.4), H, dz * (w / 2 - 0.4));
     grp.add(pin);
   }
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), mats.gold);
-  tip.position.y = P.towerH + P.spireH + 0.2;
-  grp.add(tip);
   return grp;
 }
 
@@ -146,7 +160,8 @@ export function westFront(P, mats, glassMats, labels) {
   // 双塔（坐在侧廊端头上）
   const txc = P.naveHW + P.arcadeT + P.towerW / 2 - 0.4;
   for (const s of [1, -1]) {
-    const t = tower(P, mats);
+    const asym = P.towerAsym && s < 0;   // 沙特尔式：北塔更高更尖
+    const t = tower(P, mats, asym ? 7 : 0, asym ? 7 : 0);
     t.position.set(s * txc, 0, z0 + P.towerW / 2 - 0.5);
     grp.add(t);
     const side = portal(1.6, 5.5, mats, 2);

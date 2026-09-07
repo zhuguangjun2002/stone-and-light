@@ -67,6 +67,41 @@
   }
   #timeline input[type=range] { flex: 1; accent-color: #c9a24f; min-width: 0; }
   #timeline span { white-space: nowrap; }
+  #presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+  #presets button {
+    background: rgba(255,240,210,.08); color: #efe7d6;
+    border: 1px solid rgba(255,240,210,.3); border-radius: 999px;
+    padding: 3px 10px; font: 12px system-ui, sans-serif; cursor: pointer;
+  }
+  #presets button:hover { border-color: #ffd98f; }
+  #presets button.active { background: #c9a24f; color: #241c10; border-color: #c9a24f; font-weight: 600; }
+  #cine { pointer-events: none; }
+  #cine .bar {
+    position: fixed; left: 0; right: 0; height: 0; background: #08070a;
+    transition: height .9s ease; z-index: 5;
+  }
+  #cine .bar.top { top: 0; }
+  #cine .bar.bot { bottom: 0; }
+  #cine.on .bar { height: 7vh; }
+  #subtitle {
+    position: fixed; left: 50%; bottom: 9.5vh; transform: translateX(-50%);
+    width: min(720px, 88vw); text-align: center; z-index: 6;
+    color: #f2ead8; text-shadow: 0 1px 8px rgba(0,0,0,.85);
+    opacity: 0; transition: opacity .6s; pointer-events: none;
+  }
+  #subtitle.show { opacity: 1; }
+  #subtitle .st-eyebrow {
+    margin: 0 0 2px; font: 11px system-ui, sans-serif;
+    letter-spacing: .3em; color: #ffd98f;
+  }
+  #subtitle h3 {
+    margin: 0 0 6px; font-family: "Noto Serif CJK SC", "Songti SC", serif;
+    font-size: 20px; letter-spacing: .12em; font-weight: 600;
+  }
+  #subtitle p.txt {
+    margin: 0; font: 14.5px/1.9 "Noto Serif CJK SC", "Songti SC", serif;
+    color: rgba(242,234,216,.92);
+  }
 </style>
 </head>
 <body>
@@ -78,11 +113,22 @@
 <div id="help">
   <b>拖动</b> 环视 &nbsp; <b>滚轮</b> 远近 &nbsp; <b>右键拖</b> 平移<br>
   <b>1–6</b> 视角书签：全景 / 西立面 / 中厅 / 拱顶 / 飞扶壁 / 后殿<br>
-  <b>B</b> 建造过程 &nbsp; <b>F</b> 第一人称行走 &nbsp; <b>P</b> 设计与光面板<br>
-  <b>C</b> 剖面切换 &nbsp; <b>L</b> 结构标注 &nbsp; <b>H</b> 收起帮助
+  <b>T</b> 电影导览 &nbsp; <b>B</b> 建造过程 &nbsp; <b>F</b> 第一人称行走 &nbsp; <b>P</b> 设计与光面板<br>
+  <b>C</b> 剖面切换 &nbsp; <b>L</b> 结构标注 &nbsp; <b>G</b> 敲钟 &nbsp; <b>M</b> 静音 &nbsp; <b>H</b> 收起帮助
 </div>
 <div id="toast"></div>
+<div id="cine">
+  <div class="bar top"></div>
+  <div class="bar bot"></div>
+</div>
+<div id="subtitle">
+  <p class="st-eyebrow" id="subProg"></p>
+  <h3 id="subTitle"></h3>
+  <p class="txt" id="subText"></p>
+</div>
 <div id="panel" class="hidden">
+  <h4>名堂预设</h4>
+  <div id="presets"></div>
   <h4>光 · 时刻</h4>
   <div class="row">
     <input type="range" id="sunT" min="0" max="1" step="0.01" value="0.42">

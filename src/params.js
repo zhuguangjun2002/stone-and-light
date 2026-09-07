@@ -41,6 +41,8 @@ export const P = {
 
   // 西立面
   towerW: 8, towerH: 46, spireH: 18,
+  towerSpires: true,      // false = 平顶塔（巴黎圣母院式）
+  towerAsym: false,       // true = 北塔更高（沙特尔式）
   roseR: 4.6, roseY: 24,  // 玫瑰窗半径与圆心高
 
   // 交叉部尖塔（flèche）
