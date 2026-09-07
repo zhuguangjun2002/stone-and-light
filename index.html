@@ -75,6 +75,31 @@
   }
   #presets button:hover { border-color: #ffd98f; }
   #presets button.active { background: #c9a24f; color: #241c10; border-color: #c9a24f; font-weight: 600; }
+  #presetCard {
+    position: fixed; left: 22px; top: 110px; width: 300px;
+    color: #efe7d6; background: rgba(20,16,12,.78); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,240,210,.28); border-radius: 12px;
+    padding: 16px 18px 14px; font: 13px/1.85 system-ui, sans-serif;
+    transition: opacity .4s, transform .4s;
+  }
+  #presetCard.hidden { opacity: 0; transform: translateY(8px); pointer-events: none; }
+  #presetCard h3 {
+    margin: 0 0 2px; font-family: "Noto Serif CJK SC", "Songti SC", serif;
+    font-size: 20px; letter-spacing: .1em; color: #fff3d9; font-weight: 600;
+  }
+  #presetCard .dates { color: #ffd98f; font-size: 12px; letter-spacing: .05em; margin: 0; }
+  #presetCard .place { color: rgba(239,231,214,.6); font-size: 11.5px; margin: 0 0 8px; }
+  #presetCard .stats { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 9px; padding: 0; list-style: none; }
+  #presetCard .stats li {
+    background: rgba(255,240,210,.1); border: 1px solid rgba(255,240,210,.22);
+    border-radius: 999px; padding: 1px 9px; font-size: 11.5px; white-space: nowrap;
+  }
+  #presetCard .story { margin: 0; color: rgba(239,231,214,.9); font-size: 12.5px; }
+  #presetCard .close {
+    position: absolute; top: 8px; right: 12px; background: none; border: none;
+    color: rgba(239,231,214,.55); font-size: 16px; cursor: pointer; padding: 2px;
+  }
+  #presetCard .close:hover { color: #ffd98f; }
   #cine { pointer-events: none; }
   #cine .bar {
     position: fixed; left: 0; right: 0; height: 0; background: #08070a;
@@ -117,6 +142,14 @@
   <b>C</b> 剖面切换 &nbsp; <b>L</b> 结构标注 &nbsp; <b>G</b> 敲钟 &nbsp; <b>M</b> 静音 &nbsp; <b>H</b> 收起帮助
 </div>
 <div id="toast"></div>
+<div id="presetCard" class="hidden">
+  <button class="close" id="cardClose" aria-label="关闭">✕</button>
+  <h3 id="cardName"></h3>
+  <p class="dates" id="cardDates"></p>
+  <p class="place" id="cardPlace"></p>
+  <ul class="stats" id="cardStats"></ul>
+  <p class="story" id="cardStory"></p>
+</div>
 <div id="cine">
   <div class="bar top"></div>
   <div class="bar bot"></div>

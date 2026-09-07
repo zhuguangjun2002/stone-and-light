@@ -381,6 +381,7 @@ addEventListener('mousemove', (e) => {
 });
 
 // ---------- 电影导览 ----------
+let RECORD = false;   // ?record=1：确定性逐帧步进，供无头浏览器抓帧成片
 const tour = { active: false, idx: 0, t: 0, savedTime: 0.42, savedSection: 0 };
 const _tv = new THREE.Vector3();
 function startShot(i) {
@@ -422,9 +423,9 @@ function setTour(on, { keepTime = false } = {}) {
     labelGroup.visible = false;
     document.getElementById('help').classList.add('hidden');
     document.getElementById('panel').classList.add('hidden');
+    document.getElementById('presetCard').classList.add('hidden');
     cine.classList.add('on');
-    audio.ensure();
-    audio.toll(2);
+    if (!RECORD) { audio.ensure(); audio.toll(2); }
     startShot(0);
   } else {
     cine.classList.remove('on');
@@ -461,8 +462,10 @@ function updateTour(dt) {
     if (tour.idx < TOUR.length - 1) startShot(tour.idx + 1);
     else {
       setTour(false, { keepTime: true });   // 停在黄昏
-      audio.toll(3);
-      toast('导览结束——按 T 可再看一遍');
+      if (!RECORD) {
+        audio.toll(3);
+        toast('导览结束——按 T 可再看一遍');
+      }
     }
   }
 }
@@ -524,6 +527,23 @@ function updatePanelReadout() {
   document.getElementById('beauvaisWarn').classList.toggle('hidden', P.vaultSpring <= 22);
 }
 let activePresetKey = 'proto';
+// 解说卡片：预设的年代、数据与故事
+function showPresetCard(preset) {
+  const c = preset.card;
+  if (!c) return;
+  document.getElementById('cardName').textContent = preset.name;
+  document.getElementById('cardDates').textContent = c.dates;
+  document.getElementById('cardPlace').textContent = c.place;
+  const ul = document.getElementById('cardStats');
+  ul.innerHTML = '';
+  for (const s of c.stats) {
+    const li = document.createElement('li');
+    li.textContent = s;
+    ul.appendChild(li);
+  }
+  document.getElementById('cardStory').textContent = c.story;
+  document.getElementById('presetCard').classList.remove('hidden');
+}
 function selectPreset(preset) {
   activePresetKey = preset.key;
   applyPreset(preset);
@@ -534,9 +554,13 @@ function selectPreset(preset) {
   for (const b of document.querySelectorAll('#presets button')) {
     b.classList.toggle('active', b.dataset.key === preset.key);
   }
+  showPresetCard(preset);
   toast(`${preset.name} · ${preset.desc}`);
 }
 function wirePanel() {
+  document.getElementById('cardClose').addEventListener('click', () => {
+    document.getElementById('presetCard').classList.add('hidden');
+  });
   const box = document.getElementById('presets');
   for (const preset of PRESETS) {
     const b = document.createElement('button');
@@ -652,6 +676,7 @@ if (presetQ) { activePresetKey = presetQ.key; applyPreset(presetQ); }
 mountCathedral();
 wirePanel();
 updatePanelReadout();
+if (presetQ) showPresetCard(presetQ);
 setSunTime(q.get('time') != null ? Number(q.get('time')) : 0.42);
 document.getElementById('sunT').value = q.get('time') ?? 0.42;
 if (q.get('section')) {
@@ -668,6 +693,19 @@ if (q.get('build') != null) {
   applyBuild();
 }
 flyTo(VIEWS[q.get('view')] ?? VIEWS[1], 0.01);
-if (q.get('tour')) setTour(true);
 addEventListener('pointerdown', () => audio.ensure());
-animate();
+if (q.get('record')) {
+  // 录制模式：不跑 rAF 主循环，外部逐帧调用 __tourStep(dt) 并截屏
+  RECORD = true;
+  renderer.setPixelRatio(1);
+  document.getElementById('loading')?.remove();
+  setTour(true);
+  window.__tourStep = (dt) => {
+    if (tour.active) updateTour(dt);
+    renderer.render(scene, camera);
+    return !tour.active;
+  };
+} else {
+  if (q.get('tour')) setTour(true);
+  animate();
+}
