@@ -623,24 +623,26 @@ function doAction(name) {
   }
 }
 
-const KEY_ACTIONS = {
-  t: 'tour', b: 'build', f: 'walk', p: 'panel',
-  c: 'section', l: 'labels', g: 'bell', o: 'organ', m: 'mute', h: 'help',
+// 用物理键位 e.code 而非 e.key：中文输入法等会截走字母 e.key，但 code 始终是键位本身
+const CODE_ACTIONS = {
+  KeyT: 'tour', KeyB: 'build', KeyF: 'walk', KeyP: 'panel',
+  KeyC: 'section', KeyL: 'labels', KeyG: 'bell', KeyO: 'organ', KeyM: 'mute', KeyH: 'help',
 };
 addEventListener('keydown', (e) => {
   audio.ensure();
   if (e.code.startsWith('Key') || e.code.startsWith('Shift')) walk.keys.add(e.code);
   if (e.repeat) return;
   if (tour.active) {
-    if (e.key === 'Escape') { setTour(false); return; }
-    if (e.key === 'ArrowRight') {
+    if (e.code === 'Escape') { setTour(false); return; }
+    if (e.code === 'ArrowRight') {
       if (tour.idx < TOUR.length - 1) startShot(tour.idx + 1);
       else { setTour(false, { keepTime: true }); toast('导览结束'); }
       return;
     }
   }
-  if (!tour.active && e.key >= '1' && e.key <= '7') flyTo(VIEWS[e.key]);
-  else if (KEY_ACTIONS[e.key.toLowerCase()]) doAction(KEY_ACTIONS[e.key.toLowerCase()]);
+  const digit = /^(Digit|Numpad)([1-7])$/.exec(e.code);
+  if (!tour.active && digit) flyTo(VIEWS[digit[2]]);
+  else if (CODE_ACTIONS[e.code]) doAction(CODE_ACTIONS[e.code]);
 });
 addEventListener('keyup', (e) => walk.keys.delete(e.code));
 
