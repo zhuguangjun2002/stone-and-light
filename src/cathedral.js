@@ -525,7 +525,17 @@ function addLightPools(root, bayCenters) {
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
   const poolG = new THREE.PlaneGeometry(6, 4.5);
-  const shaftG = new THREE.PlaneGeometry(4.4, 24);
+  // 光柱按「窗口端 → 地面端」两点摆：上头搭在南侧高侧窗上，下头落在地面光斑上，
+  // 整片留在中厅之内。原来是 4.4×24 的大矩形斜插着放（rotation.z = +0.42），
+  // 方向还是反的——上端在北 x=-1.5、下端在南 x=8.3——四角伸到 x = -3.5…10.3，
+  // 斜穿拱廊墙戳进侧廊，在侧廊里看就是一片浮在空中的亮矩形（tools/check-flicker.mjs
+  // 的射线报告里能看到它挡在侧廊前面）。
+  const beamTop = [P.naveHW - 0.1, P.clerSill + 1];   // 窗口端：贴着中厅内墙、窗台稍上
+  const beamBot = [2.6, 0.2];                         // 地面端：落在光斑中心上
+  const beamDx = beamTop[0] - beamBot[0], beamDy = beamTop[1] - beamBot[1];
+  const beamLen = Math.hypot(beamDx, beamDy);
+  // 宽度上限由「四角不许穿出拱廊墙外皮」定：w/2·cosθ + len/2·sinθ ≤ arcadeT + naveHW - 中心x
+  const shaftG = new THREE.PlaneGeometry(2.4, beamLen);
   for (const zc of bayCenters) {
     const pool = new THREE.Mesh(poolG, poolMat);
     pool.rotation.x = -Math.PI / 2;
@@ -533,8 +543,8 @@ function addLightPools(root, bayCenters) {
     pool.userData.buildY = 27;      // 建造动画：光随高侧窗玻璃一起出现
     root.add(pool);
     const shaft = new THREE.Mesh(shaftG, shaftMat);
-    shaft.position.set(3.4, 12.5, zc);
-    shaft.rotation.z = 0.42;
+    shaft.position.set((beamTop[0] + beamBot[0]) / 2, (beamTop[1] + beamBot[1]) / 2, zc);
+    shaft.rotation.z = Math.atan2(-beamDx, beamDy);   // 局部 +y 指向窗口端
     shaft.userData.buildY = 27;
     root.add(shaft);
   }
