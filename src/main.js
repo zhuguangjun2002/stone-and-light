@@ -267,10 +267,17 @@ function mountCathedral() {
 }
 
 // ---------- 剖面 ----------
+// 刻意让剖切面躲开构件自己的平面，偏出 5 cm：
+//   z = 27 正好是开间接缝（墙体逐跨挤出，接缝两侧各有一片端面），
+//   x = 0  正好是玫瑰窗光柱所在的平面。
+// 面正好躺在剖切面上时裁剪判据恒等于 0，每个像素的生死由浮点误差决定，就成片抖动；
+// 往"保留"的一侧偏一点，画面内容不变，抖动消失（tools/check-flicker.mjs 可复现）。
+const CUT_EPS = 0.05;
 const SECTIONS = [
   { planes: [], name: '完整外观' },
-  { planes: [new THREE.Plane(new THREE.Vector3(0, 0, -1), 27)], name: '横剖面 · 经典的结构解剖图' },
-  { planes: [new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)], name: '纵剖面 · 沿中厅轴线' },
+  // z = 27 是中厅自东数第三道开间接缝
+  { planes: [new THREE.Plane(new THREE.Vector3(0, 0, -1), P.naveZ0 + 3 * P.bay + CUT_EPS)], name: '横剖面 · 经典的结构解剖图' },
+  { planes: [new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0 + CUT_EPS)], name: '纵剖面 · 沿中厅轴线' },
 ];
 let sectionIdx = 0;
 function applySection(planes) {
