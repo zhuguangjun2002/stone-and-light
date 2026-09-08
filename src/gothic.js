@@ -82,22 +82,23 @@ export function openingGlassGeometry(o, seg = 20) {
 }
 
 // 束柱（compound pier）：圆核 + 四根附壁小柱 + 柱础/柱头。哥特束柱把拱肋的力流"画"在柱身上。
-export function makePier(height, w, mat, matCap) {
+export function makePier(height, w, mat, matCap, baseH = 0.9) {
   const grp = new THREE.Group();
   const core = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.5, w * 0.5, height, 12), mat);
   core.position.y = height / 2;
   grp.add(core);
-  const shaftG = new THREE.CylinderGeometry(w * 0.16, w * 0.16, height, 8);
+  // 附柱顶面要同时错开柱心顶（height）和柱头顶（height + 0.05），否则两处都共面
+  const shaftG = new THREE.CylinderGeometry(w * 0.16, w * 0.16, height + 0.12, 8);
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const s = new THREE.Mesh(shaftG, mat);
-    s.position.set(dx * w * 0.48, height / 2, dz * w * 0.48);
+    s.position.set(dx * w * 0.48, (height + 0.12) / 2, dz * w * 0.48);
     grp.add(s);
   }
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.75, w * 0.85, 0.9, 8), mat);
-  base.position.y = 0.45;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.75, w * 0.85, baseH, 8), mat);
+  base.position.y = baseH / 2;
   grp.add(base);
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.62, w * 0.5, 0.7, 12), matCap ?? mat);
-  cap.position.y = height - 0.35;
+  cap.position.y = height - 0.3;    // 比柱身顶面高 0.05：否则两个顶面共面打架
   grp.add(cap);
   return grp;
 }

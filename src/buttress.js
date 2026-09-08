@@ -52,7 +52,7 @@ export function flyingButtress(sideSign, wallX, pierX, P, mats) {
   grp.add(pin);
 
   // 飞券：下缘为四分之一椭圆（从墙头切向下落到墩上），上缘直坡，截面成一条石带
-  const wx = wallX, px = pierX - 0.4;
+  const wx = wallX - 0.06, px = pierX - 0.4;   // 券脚往墙里插 6 cm：端面与墙面齐平会共面打架
   const yH = P.flyerHeadY, yT = P.flyerTailY;
   const flyer = flyerMesh(wx, yH, px, yT, 0.7, mats.stone);
   if (s < 0) flyer.scale.x = -1;

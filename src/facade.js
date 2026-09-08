@@ -26,12 +26,12 @@ export function roseAssembly(r, mats, roseMat) {
 }
 
 // 层叠退缩的尖拱门廊（voussoir 层层内收），朝 +z
-export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0.2, doorZ = -layers * 0.8 + 0.1) {
+export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0.2, doorZ = -layers * 0.8 + 0.1, sillW = a * 2 + 0.8, doorOp = null) {
   const grp = new THREE.Group();
   // 门槛地坪：层叠的几道墙都从 y=0 起，洞口底边各自生成一片 y=0 的水平面，
   // 彼此完全共面（stone / stoneLight 两种颜色打架），走近时忽明忽暗、发惨白。
   // 用一块实心门槛把它们全压在下面，同时把室内铺地接到门口。
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(a * 2 + 0.8, 0.2, sillBack + 0.15), mats.floor);
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(sillW, 0.2, sillBack + 0.15), mats.floor);
   sill.position.set(0, -0.05, 0.075 - sillBack / 2);
   sill.receiveShadow = true;
   sill.userData.floorUV = true;
@@ -47,10 +47,10 @@ export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0
     grp.add(m);
   }
   // 门扇（暗色）
-  const door = new THREE.Mesh(
-    new THREE.PlaneGeometry((a - layers * 0.55) * 2 + 0.6, springY),
-    mats.door);
-  door.position.set(0, springY / 2, doorZ);
+  // 门扇按洞口形状做（矩形板堵不住尖拱，顶上会漏光）
+  const op = doorOp || { cx: 0, a: a - (layers - 1) * 0.55, y0: 0, springY: springY - (layers - 1) * 0.7, k: 1.3 };
+  const door = new THREE.Mesh(openingGlassGeometry(op), mats.door);
+  door.position.set(0, 0, doorZ);
   grp.add(door);
   // 门上山花
   const gable = new THREE.Mesh(gableGeometry(a + 0.8, springY + archApex(a, 1.3) + 0.8, springY + archApex(a, 1.3) + 4.2, 0.6), mats.stoneLight);
@@ -65,10 +65,25 @@ export function tower(P, mats, extraH = 0, extraSpire = 0) {
   const grp = new THREE.Group();
   const w = P.towerW;
   const H = P.towerH + extraH;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, H, w), mats.stone);
-  body.position.y = H / 2;
+  // 底层是可穿行的塔下开间（西立面三座门都要通到室内：中门进中厅，侧门穿过塔底进侧廊），
+  // 所以塔身不是实心墩子：baseH 以下做四面厚墙，东西两面开门洞，以上才是实心塔体。
+  const baseH = 9.2, wt = 1.4;   // 9.2 而不是 9：侧廊墩顶正好在 9，等高会顶面共面
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, H - baseH, w), mats.stone);
+  body.position.y = baseH + (H - baseH) / 2;
   body.castShadow = body.receiveShadow = true;
   grp.add(body);
+  const baseOp = [{ cx: 0, a: 1.15, y0: 0, springY: 5.2, k: 1.3 }];
+  // 东西两面满宽，南北两面缩到净宽嵌在中间——四面都做满宽会在角上重叠、外皮共面
+  const baseG = { pierced: wallWithOpenings(w, 0, baseH, wt, baseOp), solid: wallWithOpenings(w - 2 * wt, 0, baseH, wt, []) };
+  for (let f = 0; f < 4; f++) {
+    const bw = new THREE.Mesh(f % 2 === 0 ? baseG.pierced : baseG.solid, mats.stone);
+    bw.rotation.y = (f * Math.PI) / 2;
+    const off = w / 2 - wt / 2;
+    bw.position.x = [0, off, 0, -off][f];
+    bw.position.z = [off, 0, -off, 0][f];
+    bw.castShadow = bw.receiveShadow = true;
+    grp.add(bw);
+  }
   // 四角扶壁条
   const cornerG = new THREE.BoxGeometry(1.2, H * 0.82, 1.2);
   for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
@@ -134,7 +149,7 @@ export function westFront(P, mats, glassMats, labels) {
   const centerWall = new THREE.Mesh(
     wallWithOpenings(P.naveHW * 2 + P.arcadeT * 2, 0, P.naveWallTop + 2, T, [
       { circle: true, cx: 0, cy: P.roseY, r: P.roseR + 0.3 },
-      { cx: 0, a: 3.0, y0: 0, springY: 7.5, k: 1.3 },
+      { cx: 0, a: 3.05, y0: 0, springY: 7.55, k: 1.3 },   // 比门廊洞口大 0.05：否则两圈门龛侧壁共面
     ]),
     mats.stone);
   centerWall.position.z = z0 + T / 2;
@@ -161,7 +176,8 @@ export function westFront(P, mats, glassMats, labels) {
   grp.add(gable);
 
   // 三座门廊：中门 + 两塔基侧门
-  const centerPortal = portal(3.0, 7.5, mats, 3, 2.12, -1.98);   // 门槛接到中厅铺地；门扇落在西墙内皮
+  const centerPortal = portal(3.0, 7.5, mats, 3, 2.12, -1.95, 6.8,
+    { cx: 0, a: 3.0, y0: 0, springY: 7.5, k: 1.3 });   // 门槛接到中厅铺地；门扇按西墙洞口形状落在内皮
   centerPortal.position.z = z0 + T + 0.12;   // 错开 0.12：否则最内层门廊背面与西墙背面共面（z = 48）
   grp.add(centerPortal);
   labels.push({ text: '三门廊（层叠尖拱）', pos: [0, 15, z0 + 4], scope: 'out' });
@@ -173,7 +189,8 @@ export function westFront(P, mats, glassMats, labels) {
     const t = tower(P, mats, asym ? 7 : 0, asym ? 7 : 0);
     t.position.set(s * txc, 0, z0 + P.towerW / 2 - 0.5);
     grp.add(t);
-    const side = portal(1.6, 5.5, mats, 2, 1.0, -0.15);   // 门扇贴在塔身西面之前，否则埋在实心塔里
+    const side = portal(1.6, 5.5, mats, 2, 7.6, -0.18, 5.2,
+      { cx: 0, a: 1.15, y0: 0, springY: 5.2, k: 1.3 });   // 门扇按塔底洞口形状；门槛铺满塔下开间直到侧廊铺地
     side.position.set(s * txc, 0, z0 + P.towerW - 0.4);
     grp.add(side);
   }

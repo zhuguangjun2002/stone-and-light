@@ -164,7 +164,8 @@ export function buildCathedral() {
 
   // ---------- 交叉部：四根大束柱 + 拱顶 + 尖塔（flèche） ----------
   for (const sx of [1, -1]) for (const sz of [1, -1]) {
-    const big = makePier(P.vaultSpring, 2.6, mats.stoneDark, mats.stoneLight);
+    // 交叉部大墩与相邻拱廊墩在平面上交叠，等高会让柱身/附柱顶面成片共面 → 抬高 0.15 错开
+    const big = makePier(P.vaultSpring + 0.15, 2.6, mats.stoneDark, mats.stoneLight, 1.15);
     big.position.set(sx * (P.naveHW + 0.8), 0, sz * (P.naveHW + 0.8));
     root.add(big);
   }
@@ -322,7 +323,8 @@ function buildTransept(root, mats, glassMats, labels) {
     rose.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
     rose.position.set(sx * (P.transeptEnd + 1.5), 21.5, 0);
     root.add(rose);
-    const pt = portal(2.2, 6.5, mats, 2, 1.3);   // 门槛只做到 x=24.1，不压到耳堂臂铺地上
+    const pt = portal(2.2, 6.5, mats, 2, 1.3, -1.47, 5.2,
+      { cx: 0, a: 2.4, y0: 0, springY: 6.5, k: 1.3 });   // 门扇按端墙洞口形状落在内皮；门槛不压到耳堂臂铺地
     pt.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
     pt.position.set(sx * (P.transeptEnd + 1.4), 0, 0);
     root.add(pt);
@@ -351,7 +353,7 @@ function buildTransept(root, mats, glassMats, labels) {
     }
   }
   // 耳堂屋面（沿 x 向双坡，与中厅屋面等高十字相交）
-  const troof = new THREE.Mesh(gableRoofGeometry(P.naveHW + 1.8, P.roofEave, P.roofRidge, (P.transeptEnd + 1.4) * 2), mats.roof);
+  const troof = new THREE.Mesh(gableRoofGeometry(P.naveHW + 1.8, P.roofEave, P.roofRidge, (P.transeptEnd + 1.5) * 2), mats.roof)   // 屋面比端墙外皮出挑 0.1，避免端面共面;
   troof.rotation.y = Math.PI / 2;
   troof.castShadow = troof.receiveShadow = true;
   root.add(troof);
@@ -365,19 +367,22 @@ function buildApse(root, mats, glassMats, labels, vaultMats) {
   const rU = P.naveHW + 0.6;            // 上层半径（延续中厅墙线）
   const rL = P.aisleOut + P.aisleWallT / 2; // 下层回廊半径（延续侧廊外墙线）
   const facetAngles = [-72, -36, 0, 36, 72].map((d) => (d * Math.PI) / 180);
-  const jointAngles = [-90, -54, -18, 18, 54, 90].map((d) => (d * Math.PI) / 180);
+  // ±90° 处已经站着歌坛最后一榀扶壁（z = choirZ1），再放一榀就是两根墩子重叠打架
+  const jointAngles = [-54, -18, 18, 54].map((d) => (d * Math.PI) / 180);
 
   const upperOp = { cx: 0, a: 1.5, y0: 16, springY: 24, k: 1.2 };
-  const upperWallG = wallWithOpenings(2 * rU * Math.sin(Math.PI / 10) + 0.4, 12, P.naveWallTop, 1.0, [upperOp]);
+  // 相邻面的墙在转角处交叠，等高会让上下两个端面共面 → 隔一面差 3 cm（在檐口以下，看不出来）
+  const upperWallG = [0, 1].map((k) => wallWithOpenings(
+    2 * rU * Math.sin(Math.PI / 10) + 0.4, 12 + k * 0.03, P.naveWallTop + k * 0.03, 1.0, [upperOp]));
   const upperGlassG = openingGlassGeometry(upperOp);
   const lowerOp = { cx: 0, a: 1.3, y0: 2.2, springY: 8, k: 1.3 };
   const lowerWallG = wallWithOpenings(2 * rL * Math.sin(Math.PI / 10) + 0.4, 0, P.aisleWallTop - 0.5, 1.0, [lowerOp]);
   const lowerGlassG = openingGlassGeometry(lowerOp);
 
-  let gi = 1;
+  let gi = 1, fi = 0;
   for (const phi of facetAngles) {
     const rotY = Math.PI - phi;
-    const u = new THREE.Mesh(upperWallG, mats.stone);
+    const u = new THREE.Mesh(upperWallG[fi++ % 2], mats.stone);
     u.rotation.y = rotY;
     u.position.set(rU * Math.sin(phi), 0, zc - rU * Math.cos(phi));
     u.castShadow = u.receiveShadow = true;
@@ -409,7 +414,7 @@ function buildApse(root, mats, glassMats, labels, vaultMats) {
     const pin = makePinnacle(mats.stoneLight, 0.8);
     pin.position.set(dir.x * pr, 17, zc + dir.z * pr);
     root.add(pin);
-    const fl = flyerMesh(rU + 0.4, 24.5, pr - 0.3, 15.2, 0.6, mats.stone);
+    const fl = flyerMesh(rU + 0.34, 24.5, pr - 0.3, 15.2, 0.6, mats.stone);   // 券脚插进上层墙 6 cm，避免端面共面
     fl.rotation.y = Math.PI / 2 - phi;
     fl.position.set(0, 0, zc);
     root.add(fl);

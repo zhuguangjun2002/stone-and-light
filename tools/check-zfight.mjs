@@ -101,7 +101,9 @@ function polyArea(p) {
 
 const hits = new Map();
 let cmp = 0;
+let gi2 = 0;
 for (const g of groups) {
+  gi2++;
   if (g.length < 2) continue;
   const [u, v] = basis(g[0].n);
   const P = g.map((t) => {
@@ -125,7 +127,8 @@ for (const g of groups) {
     if (poly.length < 3) continue;
     const area = polyArea(poly);
     if (area < 1e-4) continue;
-    const key = g[i].mesh < g[j].mesh ? `${g[i].mesh}_${g[j].mesh}` : `${g[j].mesh}_${g[i].mesh}`;
+    // 按「网格对 + 所在平面」分别记：同两块网格可能在好几个平面上各打各的架
+    const key = `${Math.min(g[i].mesh, g[j].mesh)}_${Math.max(g[i].mesh, g[j].mesh)}_${gi2}_${Math.round(g[i].d / TOL_D)}`;
     const rec = hits.get(key) || { a: Math.min(g[i].mesh, g[j].mesh), b: Math.max(g[i].mesh, g[j].mesh),
       area: 0, gap: Infinity, box: new THREE.Box3(), n: g[i].n.clone(), pd: g[i].d,
       no: g[i].no.clone(), spot: null };
@@ -157,21 +160,25 @@ for (const h of hits.values()) {
   for (const [su, sv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     dirs.push(h.no.clone().addScaledVector(bu, su * 0.6).addScaledVector(bv, sv * 0.6).normalize());
   }
-  let inside = false, open = 0;
+  let inside = false, open = 0, straight = 0;
   for (const d of dirs) {
     rc.set(h.spot.clone().addScaledVector(d, 0.006), d);
     const hit = rc.intersectObject(scene, true).find((x) => x.distance > 0.002
       && x.object !== meshes[h.a].obj && x.object !== meshes[h.b].obj);   // 打架的这两块自己不算遮挡
-    if (!hit) { open = Infinity; continue; }
+    if (!hit) { open = Infinity; if (d === dirs[0]) straight = Infinity; continue; }
     open = Math.max(open, hit.distance);
+    if (d === dirs[0]) straight = hit.distance;
     if (hit.face) {
       const wn = hit.face.normal.clone().applyNormalMatrix(
         new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)).normalize();
       if (wn.dot(d) > 0) { inside = true; break; }
     }
   }
-  h.clear = open;                       // 半球内最远的一条通路：只要有一条能出去就算露在外面
-  h.visible = !inside && open > BURIED;
+  // 正对法线的那条射线必须能走出去，才算真的露在外面（侧向斜射线可能是从门洞里溜出去的）
+  h.clear = straight;
+  h.visible = !inside && straight > BURIED && open > BURIED;
+  // 墙脚：所有墙体都从 y=0 起，底面朝下压在广场上，背面朝观众，看不见
+  if (h.no.y < -0.9 && h.spot.y <= 0.05) h.visible = false;
 }
 const all = [...hits.values()].filter((h) => h.area >= MIN_AREA);
 const list = all.filter((h) => h.visible).sort((x, y) => y.area - x.area);
@@ -184,7 +191,7 @@ for (const h of list.slice(0, TOP)) {
   const c = h.box.getCenter(new THREE.Vector3()).toArray().map((v) => +v.toFixed(2));
   const ax = ['x', 'y', 'z'][[Math.abs(h.n.x), Math.abs(h.n.y), Math.abs(h.n.z)].indexOf(Math.max(Math.abs(h.n.x), Math.abs(h.n.y), Math.abs(h.n.z)))];
   const plane = Math.abs(h.n[ax]) > 0.999 ? `${ax} = ${(h.pd / h.n[ax]).toFixed(2)}` : `法线[${h.n.toArray().map((v) => +v.toFixed(2))}] d=${h.pd.toFixed(2)}`;
-  console.log(`${h.area.toFixed(1).padStart(7)} m²  间距 ${h.gap.toFixed(3)} m  平面 ${plane}  @ [${c}]`);
+  console.log(`${h.area.toFixed(1).padStart(7)} m²  间距 ${h.gap.toFixed(3)} m  平面 ${plane}  朝向[${h.no.toArray().map((v) => +v.toFixed(2))}] 前方空档 ${h.clear === Infinity ? '∞' : h.clear.toFixed(2)} m  @ [${c}]  重叠点[${h.spot ? h.spot.toArray().map((v) => +v.toFixed(2)) : '-'}]`);
   console.log(`          A: ${A.geo} #${A.col} ${A.tag} 中心[${A.ctr}]`);
   console.log(`          B: ${B.geo} #${B.col} ${B.tag} 中心[${B.ctr}]`);
 }
