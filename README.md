@@ -1,6 +1,6 @@
 # 石头与光 · 程序化哥特大教堂
 
-**在线体验：https://zhuguangjun2002.github.io/stone-and-light/**
+**在线体验：https://church.bigcow.net**（备用镜像：https://zhuguangjun2002.github.io/stone-and-light/）
 
 用 Three.js 程序化生成的一座盛期哥特风格大教堂，可以在浏览器里自由漫游。
 没有任何外部模型资源——每一块"石头"都是按真实大教堂的结构逻辑用代码砌出来的。
@@ -10,7 +10,7 @@
 > a construction-sequence animation with medieval site equipment, a cinematic guided tour,
 > day/night lighting, synthesized bells, and parametric presets of Notre-Dame, Chartres,
 > Amiens & Cologne. No external 3D assets — every stone is code.
-> **Live demo:** https://zhuguangjun2002.github.io/stone-and-light/
+> **Live demo:** https://church.bigcow.net
 
 ![全景](docs/overview.png)
 
@@ -75,5 +75,14 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 21 t
 ## 测试
 
 ```bash
-node test/smoke.mjs   # 无浏览器构建整个场景图，校验网格数与总高
+node test/smoke.mjs          # 无浏览器构建整个场景图，校验网格数与总高
+# test/audio-render.html     # 浏览器打开：离线渲染音频，测量钟声/管风琴的峰值与 RMS
+```
+
+## 部署
+
+推送到 main 会自动更新 GitHub Pages 镜像。主站（Cloudflare Pages，绑定 church.bigcow.net）：
+
+```bash
+CLOUDFLARE_API_TOKEN=... ./tools/deploy-cf.sh
 ```
