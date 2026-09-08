@@ -72,6 +72,39 @@ function checkerTexture() {
   });
 }
 
+
+// 门扇：竖向木板 + 铁箍 + 门环。原来用 mats.dark（不受光的纯色基础材质），
+// 所以从任何角度看都是一块死黑，像洞不像门。
+function doorTexture() {
+  return canvasTexture(512, 1024, (ctx, w, h) => {
+    const rnd = mulberry32(19);
+    ctx.fillStyle = '#3b2a1b'; ctx.fillRect(0, 0, w, h);
+    const planks = 7, pw = w / planks;
+    for (let i = 0; i < planks; i++) {
+      const v = 0.85 + rnd() * 0.3;
+      ctx.fillStyle = `rgb(${Math.round(74 * v)},${Math.round(52 * v)},${Math.round(33 * v)})`;
+      ctx.fillRect(i * pw, 0, pw - 2, h);
+      ctx.strokeStyle = 'rgba(20,12,6,0.8)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(i * pw + pw - 1, 0); ctx.lineTo(i * pw + pw - 1, h); ctx.stroke();
+      for (let k = 0; k < 26; k++) {           // 木纹
+        ctx.strokeStyle = `rgba(30,18,10,${0.06 + rnd() * 0.1})`; ctx.lineWidth = 1 + rnd() * 2;
+        const x = i * pw + rnd() * pw;
+        ctx.beginPath(); ctx.moveTo(x, rnd() * h); ctx.lineTo(x + (rnd() - 0.5) * 6, rnd() * h); ctx.stroke();
+      }
+    }
+    for (const y of [0.13, 0.42, 0.71, 0.93]) {  // 铁箍与铆钉
+      const by = y * h;
+      ctx.fillStyle = '#2a2622'; ctx.fillRect(0, by - 11, w, 22);
+      ctx.fillStyle = '#4a443c';
+      for (let x = 14; x < w; x += 34) { ctx.beginPath(); ctx.arc(x, by, 4, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.strokeStyle = '#39332c'; ctx.lineWidth = 7;   // 门环
+    for (const cx of [w * 0.30, w * 0.70]) {
+      ctx.beginPath(); ctx.arc(cx, h * 0.55, 26, 0, Math.PI * 2); ctx.stroke();
+    }
+  });
+}
+
 export function makeMaterials() {
   const stoneTex = stoneTexture('#cfc6b4', 'rgba(70,60,48,0.35)', 7);
   if (stoneTex) stoneTex.repeat.set(0.14, 0.14);
@@ -84,10 +117,16 @@ export function makeMaterials() {
   const dark = new THREE.MeshBasicMaterial({ color: '#171310' });
   const floorTex = checkerTexture();   // repeat 保持 1：UV 由各地坪按世界坐标生成，格子处处等大且跨块连续
   const floor = new THREE.MeshStandardMaterial({ color: '#cfc8ba', map: floorTex, roughness: 0.85 });
+  const doorTex = doorTexture();
+  if (doorTex) doorTex.wrapS = doorTex.wrapT = THREE.ClampToEdgeWrapping;
+  const door = new THREE.MeshStandardMaterial({
+    color: doorTex ? '#ffffff' : '#4a3423', map: doorTex, roughness: 0.75, metalness: 0.05,
+    side: THREE.DoubleSide,
+  });
   const ground = new THREE.MeshStandardMaterial({ color: '#8b9077', roughness: 1 });
   const plaza = new THREE.MeshStandardMaterial({ color: '#9a948a', roughness: 1 });
   const gold = new THREE.MeshStandardMaterial({ color: '#d9b64a', roughness: 0.35, metalness: 0.7 });
-  return { stone, stoneLight, stoneDark, roof, dark, floor, ground, plaza, gold };
+  return { stone, stoneLight, stoneDark, roof, dark, floor, door, ground, plaza, gold };
 }
 
 export { canvasTexture, hasDOM };

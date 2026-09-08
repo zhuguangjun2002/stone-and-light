@@ -202,7 +202,7 @@ export function buildCathedral() {
     f.rotation.x = -Math.PI / 2;
     f.position.set(x, 0.05, z);
     f.receiveShadow = true;
-    worldFloorUV(f);
+    f.userData.floorUV = true;
     floors.push(f);
     return f;
   };
@@ -255,6 +255,10 @@ export function buildCathedral() {
 
   // ---------- 阳光透窗的光斑与光柱（南侧受光） ----------
   addLightPools(root, bayCenters);
+
+  // 所有铺地（含三座门的门槛）统一按世界坐标铺 UV——此时层级变换已确定
+  root.updateMatrixWorld(true);
+  root.traverse((o) => { if (o.userData.floorUV) worldFloorUV(o); });
 
   return { root, labels, VAULT_APEX };
 }
@@ -468,12 +472,11 @@ function worldFloorUV(mesh) {
   const geo = mesh.geometry;
   const uv = geo.attributes.uv;
   if (!uv) return;
-  mesh.updateMatrix();
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   const s = 1 / (FLOOR_TILES * FLOOR_TILE);
   for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrix);
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
     uv.setXY(i, v.x * s, v.z * s);
   }
   uv.needsUpdate = true;
