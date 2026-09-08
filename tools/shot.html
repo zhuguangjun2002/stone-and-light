@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8"><title>取景截图</title>
+<style>html,body{margin:0;overflow:hidden;background:#000}</style>
+<script type="module">
+// 无头截图用的取景页：与 main.js 同一套光照/地面，但相机由外部脚本指定。
+import * as THREE from '../lib/three.module.js';
+import { buildCathedral } from '../src/cathedral.js';
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(1280, 720); r.setPixelRatio(1); r.shadowMap.enabled = true;
+r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#cbd6e6');
+const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85); scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff1da', 2.4); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
+sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
+sun.shadow.camera.near = 20; sun.shadow.camera.far = 350; sun.shadow.bias = -0.0006;
+scene.add(sun, sun.target);
+for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
+  const p = new THREE.PointLight('#ffd9a0', 220, 70, 2); p.position.set(x, y, z); scene.add(p);
+}
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
+  new THREE.MeshStandardMaterial({ color: '#89906f' }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.2; ground.receiveShadow = true;
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+  new THREE.MeshStandardMaterial({ color: '#9b968b' }));
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, 0, 20); plaza.receiveShadow = true;
+scene.add(ground, plaza);
+scene.add(buildCathedral().root);
+const cam = new THREE.PerspectiveCamera(55, 1280 / 720, 0.5, 2000);
+window.__sunAt = (t) => {                       // 与 main.js 的日照曲线一致
+  const s = Math.sin(Math.PI * t), az = Math.PI * t, el = (7 + 56 * s) * Math.PI / 180, R = 170;
+  sun.position.set(R * Math.cos(el) * Math.sin(az), R * Math.sin(el), -R * Math.cos(el) * Math.cos(az));
+  sun.intensity = 1.0 + 1.5 * s; hemi.intensity = 0.3 + 0.6 * s;
+};
+window.__shot = (px, py, pz, tx, ty, tz) => { cam.position.set(px, py, pz); cam.lookAt(tx, ty, tz); r.render(scene, cam); };
+window.__sunAt(0.55);
+window.__ready = true;
+</script>

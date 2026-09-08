@@ -26,7 +26,7 @@ export function roseAssembly(r, mats, roseMat) {
 }
 
 // 层叠退缩的尖拱门廊（voussoir 层层内收），朝 +z
-export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0.2) {
+export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0.2, doorZ = -layers * 0.8 + 0.1) {
   const grp = new THREE.Group();
   // 门槛地坪：层叠的几道墙都从 y=0 起，洞口底边各自生成一片 y=0 的水平面，
   // 彼此完全共面（stone / stoneLight 两种颜色打架），走近时忽明忽暗、发惨白。
@@ -50,7 +50,7 @@ export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0
   const door = new THREE.Mesh(
     new THREE.PlaneGeometry((a - layers * 0.55) * 2 + 0.6, springY),
     mats.door);
-  door.position.set(0, springY / 2, -layers * 0.8 + 0.1);
+  door.position.set(0, springY / 2, doorZ);
   grp.add(door);
   // 门上山花
   const gable = new THREE.Mesh(gableGeometry(a + 0.8, springY + archApex(a, 1.3) + 0.8, springY + archApex(a, 1.3) + 4.2, 0.6), mats.stoneLight);
@@ -161,8 +161,8 @@ export function westFront(P, mats, glassMats, labels) {
   grp.add(gable);
 
   // 三座门廊：中门 + 两塔基侧门
-  const centerPortal = portal(3.0, 7.5, mats, 3, 2.0);   // 门槛向内接到中厅铺地（z = naveZ1）
-  centerPortal.position.z = z0 + T;
+  const centerPortal = portal(3.0, 7.5, mats, 3, 2.12, -1.98);   // 门槛接到中厅铺地；门扇落在西墙内皮
+  centerPortal.position.z = z0 + T + 0.12;   // 错开 0.12：否则最内层门廊背面与西墙背面共面（z = 48）
   grp.add(centerPortal);
   labels.push({ text: '三门廊（层叠尖拱）', pos: [0, 15, z0 + 4], scope: 'out' });
 
@@ -173,7 +173,7 @@ export function westFront(P, mats, glassMats, labels) {
     const t = tower(P, mats, asym ? 7 : 0, asym ? 7 : 0);
     t.position.set(s * txc, 0, z0 + P.towerW / 2 - 0.5);
     grp.add(t);
-    const side = portal(1.6, 5.5, mats, 2);
+    const side = portal(1.6, 5.5, mats, 2, 1.0, -0.15);   // 门扇贴在塔身西面之前，否则埋在实心塔里
     side.position.set(s * txc, 0, z0 + P.towerW - 0.4);
     grp.add(side);
   }

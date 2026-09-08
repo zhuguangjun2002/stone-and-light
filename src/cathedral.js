@@ -256,8 +256,21 @@ export function buildCathedral() {
   // ---------- 阳光透窗的光斑与光柱（南侧受光） ----------
   addLightPools(root, bayCenters);
 
-  // 所有铺地（含三座门的门槛）统一按世界坐标铺 UV——此时层级变换已确定
   root.updateMatrixWorld(true);
+
+  // 去重：完全重合的网格。相邻开间共用的那道横向券会被两跨各画一遍，
+  // 同几何 + 同材质 + 同位置，深度值一模一样，必然打架（抬头看拱顶会闪）。
+  // 删掉重复的一份，观感不变，还少一批三角形。
+  const seen = new Set(), dup = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const mid = Array.isArray(o.material) ? o.material.map((m) => m.uuid).join() : o.material.uuid;
+    const key = `${o.geometry.uuid}|${mid}|${o.matrixWorld.elements.map((v) => Math.round(v * 1000)).join()}`;
+    if (seen.has(key)) dup.push(o); else seen.add(key);
+  });
+  for (const o of dup) o.parent.remove(o);
+
+  // 所有铺地（含三座门的门槛）统一按世界坐标铺 UV——此时层级变换已确定
   root.traverse((o) => { if (o.userData.floorUV) worldFloorUV(o); });
 
   return { root, labels, VAULT_APEX };
@@ -265,7 +278,7 @@ export function buildCathedral() {
 
 // 耳堂：侧墙两层窗 + 端头玫瑰窗立面 + 双坡屋面 + 两跨拱顶
 function buildTransept(root, mats, glassMats, labels) {
-  const armZ = P.naveHW + P.arcadeT / 2;          // 侧墙中心 z = ±6.6
+  const armZ = P.naveHW + P.arcadeT / 2 + 0.05;   // 侧墙中心 z = ±6.65（错开 0.05：否则内皮与中厅拱廊墙端面共面）
   const wallLen = P.transeptEnd - P.naveHW + 1.4; // 6.6 → 24.7
   const cx0 = (P.naveHW + 0.6 + P.transeptEnd + 0.7) / 2;
 
@@ -284,7 +297,7 @@ function buildTransept(root, mats, glassMats, labels) {
   for (const sx of [1, -1]) {
     for (const sz of [1, -1]) {
       const ops = mkOpenings(sx < 0);
-      const wallG = wallWithOpenings(wallLen, 0, P.naveWallTop, P.arcadeT, ops);
+      const wallG = wallWithOpenings(wallLen, 0, P.naveWallTop + 0.06, P.arcadeT, ops);   // 墙顶抬 0.06：避开与拱廊墙顶共面
       const w = new THREE.Mesh(wallG, mats.stone);
       w.position.set(sx * cx0, 0, sz * armZ);
       w.castShadow = w.receiveShadow = true;
@@ -309,7 +322,7 @@ function buildTransept(root, mats, glassMats, labels) {
     rose.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
     rose.position.set(sx * (P.transeptEnd + 1.5), 21.5, 0);
     root.add(rose);
-    const pt = portal(2.2, 6.5, mats, 2);
+    const pt = portal(2.2, 6.5, mats, 2, 1.3);   // 门槛只做到 x=24.1，不压到耳堂臂铺地上
     pt.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
     pt.position.set(sx * (P.transeptEnd + 1.4), 0, 0);
     root.add(pt);
