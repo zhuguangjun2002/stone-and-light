@@ -6,6 +6,7 @@
 export function createAudio() {
   let ctx = null;
   let master = null, windGain = null, padGain = null;
+  let reverb = null, wetGain = null;
   let birdTimer = 0;
   let muted = false;
   let insideNow = false;
@@ -19,6 +20,21 @@ export function createAudio() {
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 0.8;
     master.connect(ctx.destination);
+
+    // 教堂混响：合成的指数衰减噪声脉冲响应（约 2.8 秒——石头空间的余响）
+    const rlen = Math.floor(ctx.sampleRate * 2.8);
+    const impulse = ctx.createBuffer(2, rlen, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = impulse.getChannelData(ch);
+      for (let i = 0; i < rlen; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.exp(-3.2 * (i / rlen));
+      }
+    }
+    reverb = ctx.createConvolver();
+    reverb.buffer = impulse;
+    wetGain = ctx.createGain();
+    wetGain.gain.value = 0.45;
+    reverb.connect(wetGain).connect(master);
 
     // 风：环状白噪声 + 低通，缓慢起伏
     const len = ctx.sampleRate * 3;
@@ -106,10 +122,66 @@ export function createAudio() {
       g.gain.setValueAtTime(0, t0);
       g.gain.linearRampToValueAtTime(a, t0 + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
-      o.connect(g).connect(master);
+      g.connect(master);
+      g.connect(reverb);
+      o.connect(g);
       o.start(t0);
       o.stop(t0 + decay + 0.1);
     }
+  }
+
+  // 管风琴单音：主音管（principal）音色 = 基频 + 前几阶泛音，起音带一点"气声"（chiff）
+  function organNote(freq, when, dur, vel = 1) {
+    const t0 = ctx.currentTime + when;
+    const out = ctx.createGain();
+    out.connect(master);
+    out.connect(reverb);
+    for (const [ratio, amp] of [[1, 1], [2, 0.5], [3, 0.28], [4, 0.16], [6, 0.07]]) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = freq * ratio * (1 + (Math.random() - 0.5) * 0.0015);
+      const a = amp * vel * 0.035;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(a * 1.25, t0 + 0.025);   // chiff
+      g.gain.linearRampToValueAtTime(a, t0 + 0.09);
+      g.gain.setValueAtTime(a, t0 + dur);
+      g.gain.linearRampToValueAtTime(0, t0 + dur + 0.28);
+      o.connect(g).connect(out);
+      o.start(t0);
+      o.stop(t0 + dur + 0.35);
+    }
+  }
+
+  // 巴赫《d 小调托卡塔与赋格》BWV 565 开头（公版乐谱，自合成音色）
+  function playToccata() {
+    ensure();
+    const N = {
+      A5: 880, G5: 783.99, F5: 698.46, E5: 659.26, D5: 587.33, Cs5: 554.37,
+      A4: 440, G4: 392, F4: 349.23, E4: 329.63, D4: 293.66, Cs4: 277.18,
+      D3: 146.83, A3: 220, F3: 174.61, D2: 73.42,
+    };
+    const phrase = (oct, t) => {
+      const n = (name) => N[name] / (oct ? 2 : 1);
+      organNote(n('A5'), t, 0.28); t += 0.3;
+      organNote(n('G5'), t, 0.12); t += 0.13;
+      organNote(n('A5'), t, 1.0); t += 1.35;
+      organNote(n('G5'), t, 0.13); t += 0.14;
+      organNote(n('F5'), t, 0.13); t += 0.14;
+      organNote(n('E5'), t, 0.13); t += 0.14;
+      organNote(n('D5'), t, 0.13); t += 0.14;
+      organNote(n('Cs5'), t, 0.42); t += 0.5;
+      organNote(n('D5'), t, 1.5); t += 2.0;
+      return t;
+    };
+    let t = 0.1;
+    t = phrase(0, t);          // 高八度
+    t = phrase(1, t + 0.15);   // 低八度回声
+    // 终止：D 大调长和弦压上踏板音
+    organNote(N.D2, t, 3.6, 1.3);
+    for (const f of [N.D3, N.A3, N.D4, N.F4 * Math.pow(2, 1 / 12)]) {  // F#4
+      organNote(f, t + 0.12, 3.4, 0.85);
+    }
+    return t + 4.2;
   }
 
   // 鸣钟 n 记（约每 2.6 秒一记，如献堂礼）
@@ -136,5 +208,5 @@ export function createAudio() {
     return muted;
   }
 
-  return { ensure, bell, toll, setInside, toggleMute };
+  return { ensure, bell, toll, setInside, toggleMute, playToccata };
 }

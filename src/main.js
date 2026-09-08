@@ -479,6 +479,7 @@ const VIEWS = {
   4: { pos: [2, 5, 26], tgt: [0, 29, 8], name: '仰望肋拱顶' },
   5: { pos: [34, 27, 36], tgt: [8, 22, 18], name: '飞扶壁特写' },
   6: { pos: [34, 26, -66], tgt: [0, 15, -18], name: '后殿 · 放射飞券' },
+  7: { pos: [0, 6, 24], tgt: [0, 14, 48], name: '管风琴楼廊 · 西端' },
 };
 let fly = null;
 function flyTo(v, dur = 1.6) {
@@ -613,6 +614,10 @@ function doAction(name) {
       toast(labelsOn ? '结构标注：开（随室内 / 室外自动切换）' : '结构标注：关');
       break;
     case 'bell': audio.toll(1); break;
+    case 'organ':
+      audio.playToccata();
+      toast('管风琴 · 巴赫《d 小调托卡塔与赋格》BWV 565 开头');
+      break;
     case 'mute': toast(audio.toggleMute() ? '静音' : '声音开'); break;
     case 'help': document.getElementById('help').classList.toggle('hidden'); break;
   }
@@ -620,7 +625,7 @@ function doAction(name) {
 
 const KEY_ACTIONS = {
   t: 'tour', b: 'build', f: 'walk', p: 'panel',
-  c: 'section', l: 'labels', g: 'bell', m: 'mute', h: 'help',
+  c: 'section', l: 'labels', g: 'bell', o: 'organ', m: 'mute', h: 'help',
 };
 addEventListener('keydown', (e) => {
   audio.ensure();
@@ -634,7 +639,7 @@ addEventListener('keydown', (e) => {
       return;
     }
   }
-  if (!tour.active && e.key >= '1' && e.key <= '6') flyTo(VIEWS[e.key]);
+  if (!tour.active && e.key >= '1' && e.key <= '7') flyTo(VIEWS[e.key]);
   else if (KEY_ACTIONS[e.key.toLowerCase()]) doAction(KEY_ACTIONS[e.key.toLowerCase()]);
 });
 addEventListener('keyup', (e) => walk.keys.delete(e.code));

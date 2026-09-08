@@ -240,6 +240,9 @@ export function buildCathedral() {
     }
   }
 
+  // ---------- 管风琴（西端楼廊，玫瑰窗之下、大门之上——历史定位） ----------
+  buildOrgan(root, mats, labels);
+
   // ---------- 阳光透窗的光斑与光柱（南侧受光） ----------
   addLightPools(root, bayCenters);
 
@@ -404,6 +407,48 @@ function buildApse(root, mats, glassMats, labels, vaultMats) {
 
   labels.push({ text: '后殿（半环高窗）', pos: [0, 27, zc - 10], scope: 'out' });
   labels.push({ text: '放射状飞券', pos: [11.5, 19, zc - 8], scope: 'out' });
+}
+
+// 管风琴：西端楼廊上的琴——木质琴箱 + 三塔式锡管阵列，正对祭坛。
+// 巴赫在莱比锡圣托马斯教堂的位置就是这样一个西楼廊。按 O 键它会真的出声。
+function buildOrgan(root, mats, labels) {
+  const zWall = P.naveZ1;                 // 西墙内面
+  const wood = new THREE.MeshStandardMaterial({ color: '#4a3320', roughness: 0.7 });
+  const tin = new THREE.MeshStandardMaterial({ color: '#d8d2c2', roughness: 0.35, metalness: 0.75 });
+  const grp = new THREE.Group();
+
+  // 楼廊平台与栏板
+  const loft = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.5, 2.6), mats.stoneLight);
+  loft.position.set(0, 8.6, zWall - 1.5);
+  grp.add(loft);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(10.5, 1.1, 0.25), mats.stoneLight);
+  rail.position.set(0, 9.4, zWall - 2.7);
+  grp.add(rail);
+
+  // 琴箱
+  const caseBox = new THREE.Mesh(new THREE.BoxGeometry(9, 3.4, 1.4), wood);
+  caseBox.position.set(0, 10.6, zWall - 0.9);
+  grp.add(caseBox);
+  const crown = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.45, 1.7), wood);
+  crown.position.set(0, 12.4, zWall - 0.9);
+  grp.add(crown);
+
+  // 管列：三塔式（中塔最高），塔间为平列小管
+  const pipeAt = (x, h, r = 0.17) => {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), tin);
+    p.position.set(x, 12.6 + h / 2, zWall - 0.9);
+    grp.add(p);
+  };
+  for (const [cx, h0] of [[-3.4, 4.6], [0, 6.2], [3.4, 4.6]]) {  // 三塔
+    for (let i = -2; i <= 2; i++) pipeAt(cx + i * 0.42, h0 - Math.abs(i) * 0.55, 0.19);
+  }
+  for (const cx of [-1.7, 1.7]) {                                 // 平列
+    for (let i = -1; i <= 1; i++) pipeAt(cx + i * 0.4, 2.6, 0.14);
+  }
+
+  grp.traverse((o) => { if (o.isMesh) o.userData.buildY = 50; }); // 家具：最后进场
+  root.add(grp);
+  labels.push({ text: '管风琴（西端楼廊）', pos: [0, 15.5, P.naveZ1 - 4], scope: 'in' });
 }
 
 // 阳光透窗的光斑（地面彩色光池）与斜射光柱——彩色玻璃存在的全部意义
