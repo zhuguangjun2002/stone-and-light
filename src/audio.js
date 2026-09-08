@@ -3,7 +3,10 @@
 // 室外是风与鸟，走进堂内自动安静下来、浮起极轻的圣咏式和声垫。
 // 浏览器要求用户手势后才能出声：首次点击 / 按键时调用 ensure()。
 
-export function createAudio() {
+export function createAudio(opts = {}) {
+  // makeContext 可注入（离线测试传入 OfflineAudioContext）；offline 模式跳过 resume。
+  const makeContext = opts.makeContext ||
+    (() => new (window.AudioContext || window.webkitAudioContext)());
   let ctx = null;
   let master = null, windGain = null, padGain = null;
   let reverb = null, wetGain = null;
@@ -13,12 +16,12 @@ export function createAudio() {
 
   function ensure() {
     if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
       return;
     }
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = makeContext();
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : 0.8;
+    master.gain.value = muted ? 0 : 0.9;
     master.connect(ctx.destination);
 
     // 教堂混响：合成的指数衰减噪声脉冲响应（约 2.8 秒——石头空间的余响）
@@ -140,7 +143,7 @@ export function createAudio() {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.frequency.value = freq * ratio * (1 + (Math.random() - 0.5) * 0.0015);
-      const a = amp * vel * 0.035;
+      const a = amp * vel * 0.1;
       g.gain.setValueAtTime(0, t0);
       g.gain.linearRampToValueAtTime(a * 1.25, t0 + 0.025);   // chiff
       g.gain.linearRampToValueAtTime(a, t0 + 0.09);

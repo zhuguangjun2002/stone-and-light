@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<pre id="out">rendering…</pre>
+<script type="module">
+// 用 OfflineAudioContext 把 playToccata / toll 渲染成波形并测量峰值与 RMS，
+// 无需扬声器即可证明音频图确实产生声音。无头浏览器打开此页读取 #out。
+import { createAudio } from '../src/audio.js';
+
+const out = document.getElementById('out');
+const log = (s) => { out.textContent += '\n' + s; };
+
+async function render(name, fn, seconds) {
+  const sr = 44100;
+  const off = new OfflineAudioContext(2, Math.ceil(sr * seconds), sr);
+  const audio = createAudio({ makeContext: () => off });
+  fn(audio);
+  const buf = await off.startRendering();
+  let peak = 0, sum = 0, n = 0;
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < d.length; i += 7) {   // 抽样即可
+      const a = Math.abs(d[i]);
+      if (a > peak) peak = a;
+      sum += a * a; n++;
+    }
+  }
+  const rms = Math.sqrt(sum / n);
+  const ok = peak > 0.02 && rms > 0.0005;
+  log(`${ok ? 'PASS' : 'FAIL'} ${name}: peak=${peak.toFixed(4)} rms=${rms.toFixed(5)}`);
+  return ok;
+}
+
+try {
+  const a = await render('organ BWV565', (au) => au.playToccata(), 12);
+  const b = await render('bell toll×3', (au) => au.toll(3), 9);
+  out.textContent = `RESULT ${a && b ? 'ALL-PASS' : 'FAIL'}` + out.textContent.replace('rendering…', '');
+} catch (e) {
+  out.textContent = 'ERROR ' + e.message + '\n' + e.stack;
+}
+</script>
+</body></html>
