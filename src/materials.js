@@ -23,6 +23,9 @@ function canvasTexture(w, h, draw) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 16;            // 各向异性过滤：掠射角下地面才不会摩尔纹闪烁（渲染器会自动截到硬件上限）
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
   return tex;
 }
 
@@ -53,15 +56,19 @@ function stoneTexture(base, joint, seed = 7) {
   });
 }
 
+// 棋盘地砖：一张贴图 = FLOOR_TILES × FLOOR_TILES 格，边长 FLOOR_TILE 米（由 worldFloorUV 按世界坐标铺开）
+export const FLOOR_TILES = 8;
+export const FLOOR_TILE = 0.6;
+
 function checkerTexture() {
-  return canvasTexture(512, 512, (ctx, w, h) => {
-    const n = 8, s = w / n;
+  return canvasTexture(1024, 1024, (ctx, w, h) => {
+    const n = FLOOR_TILES, s = w / n;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       ctx.fillStyle = (i + j) % 2 ? '#3a3733' : '#b8ad9c';
       ctx.fillRect(i * s, j * s, s, s);
     }
     ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    for (let i = 0; i <= n; i++) { ctx.fillRect(i * s - 1, 0, 2, h); ctx.fillRect(0, i * s - 1, w, 2); }
+    for (let i = 0; i <= n; i++) { ctx.fillRect(i * s - 2, 0, 4, h); ctx.fillRect(0, i * s - 2, w, 4); }
   });
 }
 
@@ -75,8 +82,7 @@ export function makeMaterials() {
   const stoneDark = new THREE.MeshStandardMaterial({ color: '#b3a68f', roughness: 0.95 });
   const roof = new THREE.MeshStandardMaterial({ color: '#5b6672', roughness: 0.8 });
   const dark = new THREE.MeshBasicMaterial({ color: '#171310' });
-  const floorTex = checkerTexture();
-  if (floorTex) floorTex.repeat.set(10, 14);
+  const floorTex = checkerTexture();   // repeat 保持 1：UV 由各地坪按世界坐标生成，格子处处等大且跨块连续
   const floor = new THREE.MeshStandardMaterial({ color: '#cfc8ba', map: floorTex, roughness: 0.85 });
   const ground = new THREE.MeshStandardMaterial({ color: '#8b9077', roughness: 1 });
   const plaza = new THREE.MeshStandardMaterial({ color: '#9a948a', roughness: 1 });

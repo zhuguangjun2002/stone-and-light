@@ -89,12 +89,13 @@ function setSunTime(t) {
 const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
   new THREE.MeshStandardMaterial({ color: '#89906f', roughness: 1 }));
 ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.25;   // 与广场、室内地坪拉开高差：三层水平面靠得太近，远处会 z-fighting 闪烁
 ground.receiveShadow = true;
 scene.add(ground);
 const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
   new THREE.MeshStandardMaterial({ color: '#9b968b', roughness: 1 }));
 plaza.rotation.x = -Math.PI / 2;
-plaza.position.set(0, 0.02, 20);
+plaza.position.set(0, -0.08, 20);
 plaza.receiveShadow = true;
 scene.add(plaza);
 

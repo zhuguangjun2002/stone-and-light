@@ -4,7 +4,7 @@
 
 import * as THREE from '../lib/three.module.js';
 import { P } from './params.js';
-import { makeMaterials, canvasTexture, mulberry32 } from './materials.js';
+import { makeMaterials, canvasTexture, mulberry32, FLOOR_TILES, FLOOR_TILE } from './materials.js';
 import { makeGlassMaterials } from './glass.js';
 import {
   wallWithOpenings, openingGlassGeometry, makePier, makePinnacle,
@@ -194,18 +194,28 @@ export function buildCathedral() {
   root.add(westFront(P, mats, glassMats, labels));
 
   // ---------- 室内地面 ----------
-  const floorMain = new THREE.Mesh(new THREE.PlaneGeometry(P.aisleOut * 2, P.naveZ1 - P.choirZ1), mats.floor);
-  floorMain.rotation.x = -Math.PI / 2;
-  floorMain.position.set(0, 0.05, (P.naveZ1 + P.choirZ1) / 2);
-  floorMain.receiveShadow = true;
-  const floorTrans = new THREE.Mesh(new THREE.PlaneGeometry(P.transeptEnd * 2, P.naveHW * 2 + 1.2), mats.floor);
-  floorTrans.rotation.x = -Math.PI / 2;
-  floorTrans.position.set(0, 0.05, 0);
-  floorTrans.receiveShadow = true;
-  const floorApse = new THREE.Mesh(new THREE.CircleGeometry(P.aisleOut, 24, Math.PI, Math.PI), mats.floor);
-  floorApse.rotation.x = -Math.PI / 2;
-  floorApse.position.set(0, 0.05, P.choirZ1);
-  for (const f of [floorMain, floorTrans, floorApse]) {
+  // 三块地坪严格不重叠（重叠会在同一高度 z-fighting，走动时地面就会闪）；
+  // UV 一律按世界坐标生成，棋盘格处处等大、跨块连续。
+  const floors = [];
+  const addFloor = (geo, z, x = 0) => {
+    const f = new THREE.Mesh(geo, mats.floor);
+    f.rotation.x = -Math.PI / 2;
+    f.position.set(x, 0.05, z);
+    f.receiveShadow = true;
+    worldFloorUV(f);
+    floors.push(f);
+    return f;
+  };
+  // 中厅 + 交叉部 + 歌坛（贯通的矩形长条）
+  addFloor(new THREE.PlaneGeometry(P.aisleOut * 2, P.naveZ1 - P.choirZ1), (P.naveZ1 + P.choirZ1) / 2);
+  // 耳堂两臂：只补长条以外的部分
+  const armW = P.transeptEnd - P.aisleOut;
+  for (const sx of [-1, 1]) {
+    addFloor(new THREE.PlaneGeometry(armW, P.naveHW * 2 + 1.2), 0, sx * (P.aisleOut + armW / 2));
+  }
+  // 后殿半圆：向东（z < choirZ1）展开，与长条端头相接
+  addFloor(new THREE.CircleGeometry(P.aisleOut, 24, 0, Math.PI), P.choirZ1);
+  for (const f of floors) {
     f.userData.buildFirst = true;   // 建造动画：地坪与地基最先出现
     root.add(f);
   }
@@ -449,6 +459,24 @@ function buildOrgan(root, mats, labels) {
   grp.traverse((o) => { if (o.isMesh) o.userData.buildY = 50; }); // 家具：最后进场
   root.add(grp);
   labels.push({ text: '管风琴（西端楼廊）', pos: [0, 15.5, P.naveZ1 - 4], scope: 'in' });
+}
+
+// 地坪 UV：直接由世界 XZ 生成，一张贴图铺 FLOOR_TILES 格 × FLOOR_TILE 米。
+// 这样无论地坪多大多长，格子都是正方形且相邻地坪对得上（原来按几何体归一化 UV，
+// 中厅 0.33×0.67 m、耳堂 0.60×0.12 m，格子被拉成条纹，也就是"地面不对"）。
+function worldFloorUV(mesh) {
+  const geo = mesh.geometry;
+  const uv = geo.attributes.uv;
+  if (!uv) return;
+  mesh.updateMatrix();
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const s = 1 / (FLOOR_TILES * FLOOR_TILE);
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrix);
+    uv.setXY(i, v.x * s, v.z * s);
+  }
+  uv.needsUpdate = true;
 }
 
 // 阳光透窗的光斑（地面彩色光池）与斜射光柱——彩色玻璃存在的全部意义
