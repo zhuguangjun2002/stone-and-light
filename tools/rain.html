@@ -1,0 +1,265 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>下雨天，教堂哪里漏？</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #4a5058; font: 14px/1.6 system-ui, sans-serif; color: #eee; }
+  #ui { position: fixed; left: 12px; top: 12px; width: 268px; padding: 12px 14px; border-radius: 10px;
+        background: rgba(20,24,28,.82); backdrop-filter: blur(6px); }
+  #ui h1 { font-size: 16px; margin: 0 0 2px; }
+  #ui .sub { font-size: 12px; color: #9fb0c0; margin-bottom: 10px; }
+  #ui label { display: block; margin: 8px 0 2px; font-size: 12px; color: #cfd8e0; }
+  #ui input[type=range] { width: 100%; }
+  #ui button { width: 100%; margin-top: 10px; padding: 7px; border: 0; border-radius: 6px;
+               background: #3d6ea8; color: #fff; font-size: 13px; cursor: pointer; }
+  #ui button:disabled { background: #444; color: #999; cursor: default; }
+  #stat { margin-top: 10px; padding-top: 8px; border-top: 1px solid #ffffff22; font-size: 12px; color: #cfe0f0; }
+  #stat b { color: #ff8f7a; font-size: 15px; }
+  #list { margin-top: 6px; max-height: 190px; overflow: auto; font-size: 12px; color: #b9c6d2; }
+  #list div { padding: 2px 0; border-bottom: 1px solid #ffffff11; cursor: pointer; }
+  #list div:hover { color: #fff; }
+  #tip { position: fixed; right: 12px; bottom: 12px; font-size: 12px; color: #c8d4de;
+         background: rgba(20,24,28,.7); padding: 8px 10px; border-radius: 8px; }
+</style>
+<div id="ui">
+  <h1>下雨天，教堂哪里漏？</h1>
+  <div class="sub">按风向撒雨，落进室内的雨滴标红</div>
+  <label>风把雨吹向 <span id="lwd">南 (0°)</span></label>
+  <input id="wd" type="range" min="0" max="359" value="0">
+  <label>风力 <span id="lws">0.35</span>（水平位移 ÷ 下落）</label>
+  <input id="ws" type="range" min="0" max="120" value="35">
+  <label>雨量 <span id="lrn">中</span></label>
+  <input id="rn" type="range" min="200" max="6000" value="2500">
+  <label>扫描精度（雨滴间距，越细越慢）</label>
+  <select id="prec" style="width:100%">
+    <option value="1.6">粗 1.6 m（几秒）</option>
+    <option value="1.1" selected>中 1.1 m</option>
+    <option value="0.7">细 0.7 m（要等一会儿）</option>
+  </select>
+  <label><input id="only" type="checkbox"> 只显示漏进来的雨</label>
+  <button id="go">按这个风重新扫一遍</button>
+  <div id="stat">还没扫描</div>
+  <div id="list"></div>
+</div>
+<div id="tip">拖动环视 · 滚轮远近 · 右键平移 &nbsp;|&nbsp; 点列表里的漏点可以飞过去</div>
+<script type="importmap">
+  { "imports": { "three": "../lib/three.module.js" } }
+</script>
+<script type="module">
+// 下雨天的漏水模拟：判据与 tools/check-rain.mjs 完全一样（共用 tools/rainscan.js）——
+// 一滴雨落下去，落点如果四面八方都看不见天，那它就是漏进室内了。
+// 扫描一次得到两样东西：每一列雨的"停在哪"（用来画雨落到屋面上就停），以及漏点。
+import * as THREE from '../lib/three.module.js';
+import { OrbitControls } from '../lib/OrbitControls.js';
+import { buildCathedral } from '../src/cathedral.js';
+import { scanLeaks } from './rainscan.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#6b7480');          // 阴雨天
+scene.fog = new THREE.FogExp2('#6b7480', 0.006);
+scene.add(new THREE.HemisphereLight('#aebccb', '#5a5a52', 1.1));
+const sun = new THREE.DirectionalLight('#cfd8e0', 1.0);
+sun.position.set(60, 90, 40); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 80; sun.shadow.camera.bottom = -50;
+sun.shadow.camera.near = 20; sun.shadow.camera.far = 260; sun.shadow.bias = -0.0006;
+scene.add(sun, sun.target);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
+  new THREE.MeshStandardMaterial({ color: '#6d7360' }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true;
+ground.userData.outdoor = true;                          // 露天，落在这儿不算漏
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+  new THREE.MeshStandardMaterial({ color: '#7d7c76' }));
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20); plaza.receiveShadow = true;
+plaza.userData.outdoor = true;
+scene.add(ground, plaza);
+scene.add(buildCathedral().root);
+scene.updateMatrixWorld(true);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 2000);
+camera.position.set(46, 52, 66);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 20, 4);
+controls.enableDamping = true; controls.dampingFactor = 0.07; controls.maxDistance = 400;
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- 雨（线段，沿风向的一道道雨丝） ----------
+const MAX = 6000, STREAK = 1.1;
+const rainGeo = new THREE.BufferGeometry();
+const rainPos = new Float32Array(MAX * 6), rainCol = new Float32Array(MAX * 6);
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+rainGeo.setAttribute('color', new THREE.BufferAttribute(rainCol, 3));
+const rain = new THREE.LineSegments(rainGeo,
+  new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.75 }));
+rain.frustumCulled = false;
+scene.add(rain);
+const markers = new THREE.Group();
+scene.add(markers);
+
+const DROP_TOP = 46;                                     // 雨丝从落点上方多高开始
+const cells = [];                                        // { land:Vector3, leak:bool }
+let leakCells = [], dir = new THREE.Vector3(0, -1, 0), res = null;
+const part = { cell: new Int32Array(MAX), h: new Float32Array(MAX) };
+for (let i = 0; i < MAX; i++) { part.cell[i] = -1; part.h[i] = Math.random() * DROP_TOP; }
+
+const $ = (id) => document.getElementById(id);
+const label = (text) => {
+  const c = document.createElement('canvas'), s = 2;
+  c.width = 260 * s; c.height = 44 * s;
+  const g = c.getContext('2d');
+  g.scale(s, s);
+  g.fillStyle = 'rgba(180,30,20,.85)'; g.beginPath(); g.roundRect(0, 0, 260, 44, 8); g.fill();
+  g.fillStyle = '#fff'; g.font = 'bold 22px system-ui, sans-serif'; g.textBaseline = 'middle';
+  g.fillText(text, 12, 23);
+  const t = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  sp.scale.set(6.5, 1.1, 1);
+  return sp;
+};
+
+function respawn(i) {                                    // 给这根雨丝换一列（cells 的下标）
+  const only = $('only').checked;
+  if (only) {
+    if (!leakCells.length) { part.cell[i] = -1; return; }
+    part.cell[i] = leakCells[(Math.random() * leakCells.length) | 0];
+  } else {
+    if (!cells.length) { part.cell[i] = -1; return; }
+    part.cell[i] = (Math.random() * cells.length) | 0;
+  }
+  part.h[i] = DROP_TOP * (0.15 + 0.85 * Math.random());
+}
+
+const _p = new THREE.Vector3(), _q = new THREE.Vector3();
+function pointAt(cell, h, out) {                         // 沿雨线，落点上方 h 米处
+  const L = cells[cell].land;
+  return out.copy(L).addScaledVector(dir, -h / -dir.y);
+}
+function animateRain(dt) {
+  const n = Math.min(MAX, +$('rn').value);
+  const v = 26;                                          // 下落速度 m/s
+  for (let i = 0; i < MAX; i++) {
+    const o = i * 6;
+    if (i >= n || part.cell[i] < 0) {
+      if (i < n) respawn(i);
+      if (part.cell[i] < 0 || i >= n) { rainPos.fill(0, o, o + 6); continue; }
+    }
+    part.h[i] -= v * dt;
+    if (part.h[i] <= 0) respawn(i);
+    const c = part.cell[i];
+    pointAt(c, part.h[i], _p);
+    pointAt(c, part.h[i] + STREAK, _q);
+    rainPos[o] = _p.x; rainPos[o + 1] = _p.y; rainPos[o + 2] = _p.z;
+    rainPos[o + 3] = _q.x; rainPos[o + 4] = _q.y; rainPos[o + 5] = _q.z;
+    const leak = cells[c].leak;
+    for (const k of [0, 3]) {
+      rainCol[o + k] = leak ? 1.0 : 0.72;
+      rainCol[o + k + 1] = leak ? 0.35 : 0.82;
+      rainCol[o + k + 2] = leak ? 0.28 : 0.95;
+    }
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+  rainGeo.attributes.color.needsUpdate = true;
+}
+
+// ---------- 扫描 ----------
+let scanning = false;
+async function rescan() {
+  const deg = +$('wd').value * Math.PI / 180, sp = +$('ws').value / 100;
+  const wind = [sp * Math.cos(deg), sp * Math.sin(deg)];  // 0° = 风从南（+x）来
+  $('go').disabled = true;
+  $('stat').textContent = '撒雨中…';
+  await new Promise((r) => setTimeout(r, 30));
+  const step = +(location.hash.slice(1) || $('prec').value);
+  renderer.setAnimationLoop(null);                       // 扫描时先别渲染，射线要 CPU
+  const it = scanLeaks(scene, { wind, step, entryTop: 12 });
+  let t0 = performance.now(), r = it.next();
+  while (!r.done) {
+    if (performance.now() - t0 > 120) {                  // 每 120 ms 松一次手，别把页面卡死
+      $('stat').textContent = `撒雨中… ${Math.round(100 * r.value.done / r.value.total)}%`;
+      await new Promise((q) => setTimeout(q, 0));
+      t0 = performance.now();
+    }
+    r = it.next();
+  }
+  res = r.value;
+  dir = res.dir.clone();
+
+  cells.length = 0; leakCells.length = 0;
+  for (let i = 0; i < res.leak.length; i++) {
+    const y = res.land[i * 3 + 1];
+    if (Number.isNaN(y)) continue;
+    const idx = cells.length;
+    cells.push({ land: new THREE.Vector3(res.land[i * 3], y, res.land[i * 3 + 2]), leak: !!res.leak[i] });
+    if (res.leak[i]) leakCells.push(idx);
+  }
+  for (let i = 0; i < MAX; i++) part.cell[i] = -1;
+
+  markers.clear();
+  for (const c of res.clusters) {
+    const disc = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8),
+      new THREE.MeshBasicMaterial({ color: '#ff5a3c' }));
+    disc.position.copy(c.center);
+    markers.add(disc);
+    const sp2 = label(`漏 ${c.area.toFixed(1)} m²`);
+    sp2.position.copy(c.center).add(new THREE.Vector3(0, 2.2, 0));
+    markers.add(sp2);
+    if (c.entry) {                                       // 从口子到落点画一条线
+      markers.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([c.entry, c.center]),
+        new THREE.LineBasicMaterial({ color: '#ffb46b' })));
+    }
+  }
+
+  const area = res.clusters.reduce((a, c) => a + c.area, 0);
+  $('stat').innerHTML = `漏点 <b>${res.clusters.length}</b> 处，进水面积 <b>${area.toFixed(1)}</b> m²<br>`
+    + `按 20 mm/h 的雨算，约 <b>${Math.round(area * 20)}</b> 升/小时`;
+  $('list').innerHTML = '';
+  res.clusters.slice(0, 12).forEach((c, i) => {
+    const d = document.createElement('div');
+    const p = c.center;
+    d.textContent = `${i + 1}. ${c.area.toFixed(1)} m²  落点 [${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}]`;
+    d.onclick = () => { controls.target.copy(p); camera.position.copy(p).add(new THREE.Vector3(30, 20, 30)); };
+    $('list').appendChild(d);
+  });
+  scanning = false;
+  renderer.setAnimationLoop(loop);
+  $('go').disabled = false;
+  window.__stats = { leaks: res.clusters.length, area, wind };
+  window.__ready = true;
+}
+
+$('wd').oninput = () => {
+  const d = +$('wd').value;
+  const names = ['南', '西南', '西', '西北', '北', '东北', '东', '东南'];
+  $('lwd').textContent = `${names[Math.round(d / 45) % 8]} (${d}°)`;
+};
+$('ws').oninput = () => { $('lws').textContent = (+$('ws').value / 100).toFixed(2); };
+$('rn').oninput = () => {
+  const v = +$('rn').value;
+  $('lrn').textContent = v < 1200 ? '毛毛雨' : v < 3500 ? '中雨' : '暴雨';
+};
+$('go').onclick = rescan;
+
+let last = performance.now();
+function loop() {
+  const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (cells.length) animateRain(dt);
+  controls.update();
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(loop);
+rescan();
+</script>

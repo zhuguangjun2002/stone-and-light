@@ -140,8 +140,12 @@ export function buildCathedral() {
   labels.push({ text: '扶壁墩与小尖塔', pos: [15.4, 28.5, 13], scope: 'out' });
 
   // ---------- 屋面（木屋架在拱顶之上——石拱是天花，木架是雨伞） ----------
-  // 中厅与歌坛屋面分开两段（建造动画按区域生长；交叉部上方由耳堂屋面覆盖）
-  for (const [z0, z1] of [[P.choirZ1, -P.naveHW - 0.5], [P.naveZ0, P.naveZ1]]) {
+  // 中厅与歌坛屋面分开两段（建造动画按区域生长），但都要一直盖到交叉部上方：
+  // 屋面是 0.7 m 厚的薄板，只有中厅、歌坛、耳堂三片屋面在交叉部真正交叠，
+  // 十字屋面才是一顶完整的帐篷。原来中厅屋面从 z = naveZ0 才起，交叉部只有耳堂
+  // 那片（低）盖着，四个角上就缺了一块——从外面看是个三角形的洞，一眼看进阁楼，
+  // 斜雨也从那儿灌进去（tools/check-rain.mjs 报的就是这里）。
+  for (const [z0, z1] of [[P.choirZ1, -P.naveHW - 0.5], [-P.naveHW - 0.5, P.naveZ1]]) {
     const roof = new THREE.Mesh(
       gableRoofGeometry(P.naveHW + 1.8, P.roofEave, P.roofRidge, z1 - z0), mats.roof);
     roof.position.z = (z0 + z1) / 2;
@@ -421,12 +425,14 @@ function buildApse(root, mats, glassMats, labels, vaultMats) {
   }
 
   // 屋面：上层半锥 + 回廊环坡（半锥朝东，θ 从 π/2 起转 π，只盖 z<0 一侧）
+  // 半锥的切面要往歌坛屋面里搭 0.6 m：原来切面在 zc-0.4、歌坛屋面端面在 zc，
+  // 中间空着 0.4 m 的缝，从上面看就是一道贯通的裂口，雨直接灌进后殿。
   const cone = new THREE.Mesh(new THREE.ConeGeometry(rU + 1.6, 7, 12, 1, false, Math.PI / 2, Math.PI), mats.roof);
-  cone.position.set(0, P.naveWallTop + 3.2, zc - 0.4);
+  cone.position.set(0, P.naveWallTop + 3.2, zc + 0.6);
   cone.castShadow = true;
   root.add(cone);
   const ring = new THREE.Mesh(new THREE.ConeGeometry(rL + 1.2, 5.5, 14, 1, false, Math.PI / 2, Math.PI), mats.roof);
-  ring.position.set(0, P.aisleWallTop + 2.2, zc - 0.2);
+  ring.position.set(0, P.aisleWallTop + 2.2, zc + 0.6);
   ring.castShadow = true;
   root.add(ring);
 
