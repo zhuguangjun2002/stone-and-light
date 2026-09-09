@@ -75,7 +75,8 @@ export function doorAssembly(op, mats, cfg = {}) {
   const REB = 0.03;                                // 压过门框的量
   const leafW = doorA + REB - trW / 2;
   const wickW = Math.min(0.95, leafW * 0.5), wickH = Math.min(2.05, doorH * 0.46);
-  const wickCX = leafW * 0.04, wickY0 = 0.12;    // 便门有道要跨过去的门槛
+  // 便门往铰链一侧让开一点：它原来居中偏右，正好和大门环的底板打架，圆盘探进洞口里
+  const wickCX = -leafW * 0.06, wickY0 = 0.12;   // 便门有道要跨过去的门槛
   for (const side of [-1, 1]) {                    // -1 左扇，+1 右扇
     const hasWick = cfg.wicket && side < 0;        // 便门只开在左扇上
     const pivot = new THREE.Group();               // 枢轴在门边侧的门框上
@@ -127,13 +128,13 @@ export function doorAssembly(op, mats, cfg = {}) {
     }
     // 门环（sanctuary ring）：拉门用，也是中世纪"抓住它就受庇护"的那个环。
     // 原来挂在 1.9 m 高，手够不着——降到 1.05 m，并补一块底板（真门环都钉在铁板上）。
-    const ringY = 1.05 - doorH / 2, ringX = -side * (leafW / 2 - 0.26);
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.02, 12), mats.dark);
+    const ringY = 1.05 - doorH / 2, ringX = -side * (leafW / 2 - 0.22);
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 12), mats.dark);
     plate.rotation.x = Math.PI / 2;
     plate.position.set(ringX, ringY, T / 2 + 0.012);
     leaf.add(plate);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.022, 6, 14), mats.dark);
-    ring.position.set(ringX, ringY - 0.06, T / 2 + 0.035);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.018, 6, 14), mats.dark);
+    ring.position.set(ringX, ringY - 0.05, T / 2 + 0.03);
     ring.rotation.x = 0.5;
     leaf.add(ring);
 
