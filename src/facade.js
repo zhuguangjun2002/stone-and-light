@@ -3,7 +3,7 @@
 // 双塔在结构上压稳立面，在城市里是远眺的地标。
 
 import * as THREE from '../lib/three.module.js';
-import { wallWithOpenings, openingGlassGeometry, gableGeometry, makePinnacle, archApex } from './gothic.js';
+import { wallWithOpenings, openingGlassGeometry, openingShape, gableGeometry, makePinnacle, archApex } from './gothic.js';
 
 // 玫瑰窗组件：石环 + 放射辐条 + 玻璃盘
 export function roseAssembly(r, mats, roseMat) {
@@ -25,8 +25,118 @@ export function roseAssembly(r, mats, roseMat) {
   return grp;
 }
 
+// 一座门：过梁（lintel）+ 门楣（tympanum）+ 中柱（trumeau）+ 两扇门板 + 便门（wicket）
+//
+// 真教堂的大门远比门洞矮：门扇顶上横一道过梁，过梁以上的尖拱面是**实心的门楣浮雕**。
+// 原来这里把整个尖拱洞口做成一整片门扇——中门就成了 6 m 宽、13.65 m 高的一块板，
+// 比管风琴楼廊的底面（8.35 m）还高 5 m，向内开会直接撞进楼廊，根本开不了。
+// 中门宽 6 m，两扇之间还要立一根中柱顶住过梁；左扇上挖一个便门——巨门要几个人合力
+// 才推得开，日常都是从这扇小门进出，大扇只在庆典、出殡时才开。
+//
+// 门轴朝室内（-z）：门龛层层内收，向外开会撞上门龛。每扇门板都装在自己的枢轴组里，
+// 组上记着 userData.door，之后做开关动画时直接转这个组就行。
+export function doorAssembly(op, mats, cfg = {}) {
+  const grp = new THREE.Group();
+  const a = op.a;
+  // 门扇要装在**最内一圈**门龛的洞口里（门龛层层内收，门在最窄那一圈），不能按外圈
+  // 的洞口做——那样门比它要转进去的洞还宽，一开就撞门框。外圈到内圈之间的空当用
+  // 门颊（jamb）填实，这也正是真门龛的样子：一层层收进去，最后收到门那么宽。
+  const doorA = cfg.doorA ?? a;
+  const doorH = cfg.doorH ?? Math.min(4.6, op.springY * 0.62);
+  const T = 0.12;                                  // 门板厚
+  const lintelH = 0.42;
+  const trW = cfg.trumeau ? 0.45 : 0;              // 中柱宽
+  const lintelTop = doorH + lintelH;
+
+  // 门楣：过梁以上整片填实（真教堂这里是《最后的审判》一类的浮雕）
+  const tymp = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(openingShape({ ...op, y0: lintelTop }), { depth: 0.3, bevelEnabled: false }),
+    mats.stoneLight);
+  tymp.position.z = -0.15;
+  tymp.castShadow = tymp.receiveShadow = true;
+  grp.add(tymp);
+
+  // 门颊：外圈洞口与门洞之间的两条侧壁
+  if (doorA < a - 0.01) {
+    for (const sx of [-1, 1]) {
+      const w = a - doorA;
+      const jamb = new THREE.Mesh(new THREE.BoxGeometry(w, lintelTop, 0.42), mats.stoneLight);
+      jamb.position.set(op.cx + sx * (doorA + w / 2), lintelTop / 2, -0.06);
+      jamb.castShadow = jamb.receiveShadow = true;
+      grp.add(jamb);
+    }
+  }
+
+  // 过梁
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(a * 2 + 0.1, lintelH, 0.5), mats.stone);
+  lintel.position.set(op.cx, doorH + lintelH / 2, -0.1);
+  lintel.castShadow = true;
+  grp.add(lintel);
+
+  // 中柱：门太宽时顶住过梁中点
+  if (cfg.trumeau) {
+    const tr = new THREE.Mesh(new THREE.BoxGeometry(trW, doorH + 0.05, 0.42), mats.stoneLight);
+    tr.position.set(op.cx, (doorH + 0.05) / 2, -0.06);
+    tr.castShadow = true;
+    grp.add(tr);
+  }
+
+  const leafW = doorA - trW / 2 - 0.03;
+  for (const side of [-1, 1]) {                    // -1 左扇，+1 右扇
+    const pivot = new THREE.Group();               // 枢轴在门边侧的门框上
+    pivot.position.set(op.cx + side * doorA, 0, 0);
+    pivot.userData.door = { side, max: cfg.max ?? 1.75 };   // 开到 ~100°
+    grp.add(pivot);
+
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, doorH, T), mats.door);
+    leaf.position.set(-side * leafW / 2, doorH / 2, -T / 2);
+    leaf.castShadow = leaf.receiveShadow = true;
+    pivot.add(leaf);
+
+    // 铁铰链带（strap hinge）：从门轴横伸过门板三分之二宽
+    for (const hy of [doorH * 0.16, doorH * 0.55, doorH * 0.88]) {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(leafW * 0.66, 0.13, 0.03), mats.dark);
+      strap.position.set(side * (leafW / 2 - leafW * 0.33), hy - doorH / 2, T / 2 + 0.015);
+      leaf.add(strap);
+    }
+    // 门钉
+    const studG = new THREE.SphereGeometry(0.045, 8, 6);
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 3; c++) {
+        const stud = new THREE.Mesh(studG, mats.dark);
+        stud.position.set((c - 1) * leafW * 0.28, (r + 0.5) * doorH / 4 - doorH / 2, T / 2 + 0.03);
+        leaf.add(stud);
+      }
+    }
+    // 门环
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 6, 14), mats.dark);
+    ring.position.set(-side * (leafW / 2 - 0.28), doorH * 0.42 - doorH / 2, T / 2 + 0.05);
+    leaf.add(ring);
+
+    // 便门：只开在左扇上
+    if (cfg.wicket && side < 0) {
+      const ww = Math.min(0.95, leafW * 0.42), wh = Math.min(2.05, doorH * 0.46);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.12, wh + 0.12, 0.02), mats.dark);
+      frame.position.set(leafW * 0.06, wh / 2 + 0.12 - doorH / 2, T / 2 + 0.005);
+      leaf.add(frame);
+      const wp = new THREE.Group();                // 便门自己的枢轴，之后可以单独开
+      wp.position.set(leafW * 0.06 - ww / 2, 0.12 - doorH / 2, T / 2 + 0.01);
+      wp.userData.door = { side: -1, max: cfg.wicketMax ?? 1.6, wicket: true };
+      leaf.add(wp);
+      const wleaf = new THREE.Mesh(new THREE.BoxGeometry(ww, wh, 0.05), mats.door);
+      wleaf.position.set(ww / 2, wh / 2, 0);
+      wp.add(wleaf);
+      const wring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.016, 6, 12), mats.dark);
+      wring.position.set(ww - 0.16, wh * 0.52, 0.04);
+      wleaf.add(wring);
+    }
+  }
+  grp.userData.doorId = cfg.id ?? '';
+  return grp;
+}
+
 // 层叠退缩的尖拱门廊（voussoir 层层内收），朝 +z
-export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0.2, doorZ = -layers * 0.8 + 0.1, sillW = a * 2 + 0.8, doorOp = null) {
+export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0.2, doorZ = -layers * 0.8 + 0.1, sillW = a * 2 + 0.8, doorOp = null, doorCfg = {}) {
   const grp = new THREE.Group();
   // 门槛地坪：层叠的几道墙都从 y=0 起，洞口底边各自生成一片 y=0 的水平面，
   // 彼此完全共面（stone / stoneLight 两种颜色打架），走近时忽明忽暗、发惨白。
@@ -46,10 +156,9 @@ export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0
     m.castShadow = true;
     grp.add(m);
   }
-  // 门扇（暗色）
-  // 门扇按洞口形状做（矩形板堵不住尖拱，顶上会漏光）
+  // 门：过梁 + 门楣 + （中门另加）中柱 + 两扇门板
   const op = doorOp || { cx: 0, a: a - (layers - 1) * 0.55, y0: 0, springY: springY - (layers - 1) * 0.7, k: 1.3 };
-  const door = new THREE.Mesh(openingGlassGeometry(op), mats.door);
+  const door = doorAssembly(op, mats, doorCfg);
   door.position.set(0, 0, doorZ);
   grp.add(door);
   // 门上山花
@@ -177,7 +286,8 @@ export function westFront(P, mats, glassMats, labels) {
 
   // 三座门廊：中门 + 两塔基侧门
   const centerPortal = portal(3.0, 7.5, mats, 3, 2.12, -1.95, 6.8,
-    { cx: 0, a: 3.0, y0: 0, springY: 7.5, k: 1.3 });   // 门槛接到中厅铺地；门扇按西墙洞口形状落在内皮
+    { cx: 0, a: 3.0, y0: 0, springY: 7.5, k: 1.3 },    // 门槛接到中厅铺地；门落在西墙内皮
+    { id: 'west-center', doorA: 1.9, doorH: 4.6, trumeau: true, wicket: true });
   centerPortal.position.z = z0 + T + 0.12;   // 错开 0.12：否则最内层门廊背面与西墙背面共面（z = 48）
   grp.add(centerPortal);
   labels.push({ text: '三门廊（层叠尖拱）', pos: [0, 15, z0 + 4], scope: 'out' });
@@ -190,7 +300,8 @@ export function westFront(P, mats, glassMats, labels) {
     t.position.set(s * txc, 0, z0 + P.towerW / 2 - 0.5);
     grp.add(t);
     const side = portal(1.6, 5.5, mats, 2, 7.6, -0.18, 5.2,
-      { cx: 0, a: 1.15, y0: 0, springY: 5.2, k: 1.3 });   // 门扇按塔底洞口形状；门槛铺满塔下开间直到侧廊铺地
+      { cx: 0, a: 1.15, y0: 0, springY: 5.2, k: 1.3 },    // 门槛铺满塔下开间直到侧廊铺地
+      { id: s > 0 ? 'west-south' : 'west-north', doorA: 1.05, doorH: 3.3 });
     side.position.set(s * txc, 0, z0 + P.towerW - 0.4);
     grp.add(side);
   }

@@ -67,10 +67,16 @@ export function wallWithOpenings(width, y0, y1, thickness, openings = [], seg = 
 }
 
 // 洞口形状的平面玻璃几何（UV 归一化到洞口包围盒，便于贴彩色玻璃图案）
-export function openingGlassGeometry(o, seg = 20) {
+// 洞口的平面轮廓（玻璃、门楣这类"把洞填上"的构件都用它）
+export function openingShape(o, seg = 20) {
   const shape = new THREE.Shape();
   if (o.circle) shape.absarc(o.cx, o.cy, o.r, 0, Math.PI * 2, false);
   else tracePointedOpening(shape, o.cx, o.a, o.y0, o.springY, o.k ?? 1, seg);
+  return shape;
+}
+
+export function openingGlassGeometry(o, seg = 20) {
+  const shape = openingShape(o, seg);
   const g = new THREE.ShapeGeometry(shape, seg);
   g.computeBoundingBox();
   const bb = g.boundingBox, w = bb.max.x - bb.min.x, h = bb.max.y - bb.min.y;
