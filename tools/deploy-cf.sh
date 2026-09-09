@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-cp -r "$ROOT/index.html" "$ROOT/src" "$ROOT/lib" "$ROOT/docs" "$STAGE"/
+cp -r "$ROOT/index.html" "$ROOT/_headers" "$ROOT/src" "$ROOT/lib" "$ROOT/docs" "$STAGE"/
 echo "暂存 $(find "$STAGE" -type f | wc -l) 个文件 ($(du -sh "$STAGE" | cut -f1))"
 
 npx --yes wrangler@latest pages deploy "$STAGE" \
