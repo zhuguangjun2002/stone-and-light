@@ -426,12 +426,20 @@ function refreshDoorUI() {
   }
 }
 function cycleDoor(d) {
+  const before = d.state;
   setDoorState(d, nextState(d));
+  audio.door(d.state !== 'closed', d.state === 'open' || before === 'open');
   toast(`${d.name}：${STATE_NAMES[d.state]}`);
   refreshDoorUI();
 }
 function setAllDoors(state, instant = false) {
-  for (const d of doors) setDoorState(d, state === 'wicket' && !d.hasWicket ? 'closed' : state, instant);
+  let changed = false;
+  for (const d of doors) {
+    const want = state === 'wicket' && !d.hasWicket ? 'closed' : state;
+    if (d.state !== want) changed = true;
+    setDoorState(d, want, instant);
+  }
+  if (changed && !instant) audio.door(state !== 'closed', true);
   refreshDoorUI();
 }
 // 面板里的小平面图：十字平面 + 半圆后殿，五个点就是五座门，点一下换一档。
@@ -465,6 +473,22 @@ function buildDoorPlan() {
     g.appendChild(c);
   }
   refreshDoorUI();
+}
+
+// 第一人称：走到门前 4 m 内按 E 开关这一扇（大门就该是走过去推的）
+let nearDoor = null;
+function updateNearDoor() {
+  if (!walk.active || !doors.length) { nearDoor = null; return; }
+  const p = camera.position;
+  let best = null, bd = 16;                       // 4 m 以内
+  for (const d of doors) {
+    const dist = (d.x - p.x) ** 2 + (d.z - p.z) ** 2;
+    if (dist < bd) { bd = dist; best = d; }
+  }
+  if (best !== nearDoor) {
+    nearDoor = best;
+    if (best) toast(`${best.name} · 按 E 开关`);
+  }
 }
 
 // ---------- 天气 ----------
@@ -916,6 +940,11 @@ function doAction(name) {
       break;
     case 'mute': toast(audio.toggleMute() ? '静音' : '声音开'); break;
     case 'help': document.getElementById('help').classList.toggle('hidden'); break;
+    case 'nearDoor':
+      if (!walk.active) break;                    // 只在第一人称里有意义
+      if (nearDoor) cycleDoor(nearDoor);
+      else toast('走到门前再按 E');
+      break;
     case 'doors': {
       const anyOpen = doors.some((d) => d.state !== 'closed');
       setAllDoors(anyOpen ? 'closed' : 'open');
@@ -935,7 +964,7 @@ function doAction(name) {
 const CODE_ACTIONS = {
   KeyT: 'tour', KeyB: 'build', KeyF: 'walk', KeyP: 'panel',
   KeyC: 'section', KeyL: 'labels', KeyG: 'bell', KeyO: 'organ', KeyM: 'mute', KeyH: 'help',
-  KeyK: 'doors', Minus: 'uiSmaller', Equal: 'uiBigger',
+  KeyK: 'doors', KeyE: 'nearDoor', Minus: 'uiSmaller', Equal: 'uiBigger',
 };
 addEventListener('keydown', (e) => {
   audio.ensure();
@@ -1005,6 +1034,7 @@ function animate() {
   else if (walk.active) updateWalk(dt);
   else controls.update();
   updateDoors(doors, dt);
+  updateNearDoor();
   updatePrecip(dt);
   audio.setInside(insideCathedral(camera.position));
   updateLabels();

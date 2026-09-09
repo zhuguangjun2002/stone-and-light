@@ -104,6 +104,54 @@ export function createAudio(opts = {}) {
     }
   }
 
+  // 开关门：木门的吱呀是"粘滑"摩擦——门轴一边卡住一边松脱，听感是一条抖着往下滑的
+  // 带噪音高。用白噪声过一个 Q 很高的带通模拟：带通中心频率往下滑，再叠一点抖动。
+  // 关门收尾加一记闷响（门扇撞门框 + 落栓）。大扇比便门低沉、长一些。
+  function door(opening = true, big = true) {
+    if (!ctx || muted) return;
+    const t0 = ctx.currentTime;
+    const dur = big ? 1.15 : 0.7;
+    const n = ctx.createBufferSource();
+    const len = Math.ceil(ctx.sampleRate * (dur + 0.4));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    n.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = big ? 14 : 9;
+    const f0 = big ? 620 : 900, f1 = big ? 300 : 480;
+    bp.frequency.setValueAtTime(opening ? f0 : f1, t0);
+    bp.frequency.exponentialRampToValueAtTime(opening ? f1 : f0, t0 + dur);
+    const lfo = ctx.createOscillator();          // 粘滑的抖动
+    lfo.frequency.value = big ? 11 : 17;
+    const lfoG = ctx.createGain();
+    lfoG.gain.value = big ? 90 : 60;
+    lfo.connect(lfoG).connect(bp.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(big ? 0.05 : 0.035, t0 + 0.12);
+    g.gain.setValueAtTime(big ? 0.05 : 0.035, t0 + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0004, t0 + dur);
+    n.connect(bp).connect(g);
+    g.connect(master); g.connect(reverb);
+    n.start(t0); n.stop(t0 + dur + 0.05);
+    lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+    if (!opening) {                              // 关到位的闷响
+      const t1 = t0 + dur;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(big ? 82 : 120, t1);
+      o.frequency.exponentialRampToValueAtTime(big ? 46 : 70, t1 + 0.2);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0, t1);
+      og.gain.linearRampToValueAtTime(big ? 0.16 : 0.09, t1 + 0.012);
+      og.gain.exponentialRampToValueAtTime(0.0002, t1 + 0.5);
+      o.connect(og); og.connect(master); og.connect(reverb);
+      o.start(t1); o.stop(t1 + 0.55);
+    }
+  }
+
   // 一记钟。base 为基频（prime），泛音比与衰减取自真实钟的声学测量近似。
   function bell(base = 196, vel = 1, when = 0) {
     if (!ctx) return;
@@ -211,5 +259,5 @@ export function createAudio(opts = {}) {
     return muted;
   }
 
-  return { ensure, bell, toll, setInside, toggleMute, playToccata };
+  return { ensure, bell, toll, door, setInside, toggleMute, playToccata };
 }
