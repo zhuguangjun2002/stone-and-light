@@ -346,14 +346,21 @@ async function startBake() {
     return;
   }
 
-  // 每个 Worker 都要自己建一遍教堂加射线网格，几十兆内存——按内存和核数一起限，
-  // 手机上再把射线数减半（慢一点，但不至于把内存撑爆）。
-  // 本机实测（8 线程）：4 个 Worker 17 s、6 个 12.5 s、8 个 13.5 s——超线程吃满之后
+  // 每个 Worker 都要自己建一遍教堂加射线网格，四五十兆内存——手机上开多了会被系统
+  // 直接杀掉标签页，所以按"小设备档"整体降规格：少开 Worker、少打射线、顶点缓存
+  // 放粗、射线网格放粗（网格粗一格，条目数少四成，内存跟着降）。
+  // 桌面实测（8 线程）：4 个 Worker 17 s、6 个 12.5 s、8 个 13.5 s——超线程吃满之后
   // 反而变慢，6 个是拐点。
-  const mem = navigator.deviceMemory ?? 8;
+  // 注意 iOS 的 Safari 不支持 navigator.deviceMemory，取不到值时不能当成大内存机器，
+  // 所以屏幕宽度、核数、指针类型三样一起判。
+  const mem = navigator.deviceMemory ?? 0;
   const cores = navigator.hardwareConcurrency || 4;
-  const n = Math.max(1, Math.min(mem <= 4 ? 2 : mem <= 8 ? 3 : 6, cores - 1));
-  const rays = innerWidth < 700 || mem <= 4 ? 16 : 32;
+  const coarse = matchMedia?.('(pointer: coarse)')?.matches;
+  const low = innerWidth < 820 || (mem && mem <= 4) || cores <= 4 || (coarse && !mem);
+  const n = Math.max(1, Math.min(low ? 2 : mem && mem <= 8 ? 3 : 6, cores - 1));
+  const rays = low ? 14 : 32;
+  const prof = low ? { cell: 1.6, cachePos: 0.45 } : {};
+  if (el) el.textContent = `室内光照：烘焙中 0%${low ? '（低精度）' : ''}`;
   const total = bakeableMeshes(root).length;
   const colors = new Array(total).fill(null);
   const idx = [], flat = [];
@@ -361,9 +368,15 @@ async function startBake() {
   const t0 = performance.now();
   let left = n;
   baking = true;
-  if (el) el.textContent = '室内光照：烘焙中 0%';
   for (let k = 0; k < n; k++) {
-    const w = new Worker(new URL('./bakeworker.js', import.meta.url), { type: 'module' });
+    let w;
+    try {
+      w = new Worker(new URL('./bakeworker.js', import.meta.url), { type: 'module' });
+    } catch {
+      if (el) el.textContent = '室内光照：这台设备跑不动，用替身光照';
+      stopBake();
+      return;
+    }
     bakeWorkers.push(w);
     w.onmessage = (ev) => {
       if (job !== bakeJob) return;
@@ -385,7 +398,7 @@ async function startBake() {
       cachePut(key, { meshes: total, idx, colors: flat });
     };
     w.onerror = () => { if (el) el.textContent = '室内光照：烘焙失败（用替身光照）'; stopBake(); };
-    w.postMessage({ params: { ...P }, slice: { k, n }, rays });
+    w.postMessage({ params: { ...P }, slice: { k, n }, rays, prof });
   }
 }
 

@@ -71,13 +71,29 @@ export function doorAssembly(op, mats, cfg = {}) {
   }
 
   const leafW = doorA - trW / 2 - 0.03;
+  const wickW = Math.min(0.95, leafW * 0.5), wickH = Math.min(2.05, doorH * 0.46);
+  const wickCX = leafW * 0.04, wickY0 = 0.12;    // 便门有道要跨过去的门槛
   for (const side of [-1, 1]) {                    // -1 左扇，+1 右扇
+    const hasWick = cfg.wicket && side < 0;        // 便门只开在左扇上
     const pivot = new THREE.Group();               // 枢轴在门边侧的门框上
     pivot.position.set(op.cx + side * doorA, 0, 0);
     pivot.userData.door = { side, max: cfg.max ?? 1.75 };   // 开到 ~100°
     grp.add(pivot);
 
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, doorH, T), mats.door);
+    // 门板：有便门的那扇要**真的挖个洞**，不然把便门推开、后面还是整块门板
+    const face = new THREE.Shape();
+    face.moveTo(-leafW / 2, 0); face.lineTo(leafW / 2, 0);
+    face.lineTo(leafW / 2, doorH); face.lineTo(-leafW / 2, doorH); face.closePath();
+    if (hasWick) {
+      const h = new THREE.Path();
+      h.moveTo(wickCX - wickW / 2, wickY0); h.lineTo(wickCX + wickW / 2, wickY0);
+      h.lineTo(wickCX + wickW / 2, wickY0 + wickH); h.lineTo(wickCX - wickW / 2, wickY0 + wickH);
+      h.closePath();
+      face.holes.push(h);
+    }
+    const leafG = new THREE.ExtrudeGeometry(face, { depth: T, bevelEnabled: false });
+    leafG.translate(0, -doorH / 2, -T / 2);        // 原点挪到门板中心，配件的坐标照旧
+    const leaf = new THREE.Mesh(leafG, mats.door);
     leaf.position.set(-side * leafW / 2, doorH / 2, -T / 2);
     leaf.castShadow = leaf.receiveShadow = true;
     pivot.add(leaf);
@@ -88,12 +104,14 @@ export function doorAssembly(op, mats, cfg = {}) {
       strap.position.set(side * (leafW / 2 - leafW * 0.33), hy - doorH / 2, T / 2 + 0.015);
       leaf.add(strap);
     }
-    // 门钉
+    // 门钉（躲开便门那块洞）
     const studG = new THREE.SphereGeometry(0.045, 8, 6);
     for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 3; c++) {
+        const x = (c - 1) * leafW * 0.28, y = (r + 0.5) * doorH / 4;
+        if (hasWick && Math.abs(x - wickCX) < wickW / 2 + 0.06 && y > wickY0 - 0.06 && y < wickY0 + wickH + 0.06) continue;
         const stud = new THREE.Mesh(studG, mats.dark);
-        stud.position.set((c - 1) * leafW * 0.28, (r + 0.5) * doorH / 4 - doorH / 2, T / 2 + 0.03);
+        stud.position.set(x, y - doorH / 2, T / 2 + 0.03);
         leaf.add(stud);
       }
     }
@@ -102,21 +120,25 @@ export function doorAssembly(op, mats, cfg = {}) {
     ring.position.set(-side * (leafW / 2 - 0.28), doorH * 0.42 - doorH / 2, T / 2 + 0.05);
     leaf.add(ring);
 
-    // 便门：只开在左扇上
-    if (cfg.wicket && side < 0) {
-      const ww = Math.min(0.95, leafW * 0.42), wh = Math.min(2.05, doorH * 0.46);
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.12, wh + 0.12, 0.02), mats.dark);
-      frame.position.set(leafW * 0.06, wh / 2 + 0.12 - doorH / 2, T / 2 + 0.005);
-      leaf.add(frame);
-      const wp = new THREE.Group();                // 便门自己的枢轴，之后可以单独开
-      wp.position.set(leafW * 0.06 - ww / 2, 0.12 - doorH / 2, T / 2 + 0.01);
+    if (hasWick) {
+      // 洞口一圈包边（真便门是拿铁条箍住洞口的）
+      for (const [w, h, x, y] of [[wickW + 0.1, 0.05, wickCX, wickY0 + wickH + 0.02],
+        [0.05, wickH + 0.1, wickCX - wickW / 2 - 0.02, wickY0 + wickH / 2],
+        [0.05, wickH + 0.1, wickCX + wickW / 2 + 0.02, wickY0 + wickH / 2]]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, T + 0.03), mats.dark);
+        bar.position.set(x, y - doorH / 2, 0);
+        leaf.add(bar);
+      }
+      const wp = new THREE.Group();                // 便门自己的枢轴，可以单独开
+      wp.position.set(wickCX - wickW / 2, wickY0 - doorH / 2, 0);
       wp.userData.door = { side: -1, max: cfg.wicketMax ?? 1.6, wicket: true };
       leaf.add(wp);
-      const wleaf = new THREE.Mesh(new THREE.BoxGeometry(ww, wh, 0.05), mats.door);
-      wleaf.position.set(ww / 2, wh / 2, 0);
+      const wleaf = new THREE.Mesh(new THREE.BoxGeometry(wickW - 0.02, wickH - 0.02, T * 0.8), mats.door);
+      wleaf.position.set(wickW / 2, wickH / 2, 0);
+      wleaf.castShadow = true;
       wp.add(wleaf);
       const wring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.016, 6, 12), mats.dark);
-      wring.position.set(ww - 0.16, wh * 0.52, 0.04);
+      wring.position.set(wickW / 2 - 0.16, 0, T * 0.4 + 0.02);
       wleaf.add(wring);
     }
   }

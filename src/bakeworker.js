@@ -8,7 +8,7 @@ import { bakeVertexLight } from './bake.js';
 import { P, recomputeDerived } from './params.js';
 
 self.onmessage = (e) => {
-  const { params, slice, rays } = e.data;
+  const { params, slice, rays, prof } = e.data;
   Object.assign(P, params);
   recomputeDerived();
 
@@ -24,7 +24,7 @@ self.onmessage = (e) => {
   scene.add(ground, plaza);
   scene.updateMatrixWorld(true);
 
-  const it = bakeVertexLight(scene, { slice, rays: rays ?? 32 });
+  const it = bakeVertexLight(scene, { slice, rays: rays ?? 32, ...(prof ?? {}) });
   let r = it.next(), last = 0;
   while (!r.done) {
     if (r.value.done - last > 3000) { last = r.value.done; self.postMessage({ progress: r.value }); }
