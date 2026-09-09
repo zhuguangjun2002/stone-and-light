@@ -3,13 +3,17 @@
 **在线体验：https://church.bigcow.net**（备用镜像：https://zhuguangjun2002.github.io/stone-and-light/）
 
 用 Three.js 程序化生成的一座盛期哥特风格大教堂，可以在浏览器里自由漫游。
-没有任何外部模型资源——每一块"石头"都是按真实大教堂的结构逻辑用代码砌出来的。
+没有任何外部模型资源——每一块"石头"、每一尊像、每一张贴图，都是按真实大教堂的
+结构逻辑用代码砌出来的。彩窗有两套镶玻方案；室内的间接光在加载时用 Worker 现烘成
+顶点色；五座门能开能关（关 / 便门 / 全开），雨雪天会自己关上；第一人称走路会被墙、
+柱、长椅和关着的门挡住。
 
 > **EN** — *Stone & Light* is a fully procedural High Gothic cathedral in vanilla Three.js:
 > pointed arches, quadripartite rib vaults, flying buttresses, procedural stained glass,
 > a construction-sequence animation with medieval site equipment, a cinematic guided tour,
-> day/night lighting, synthesized bells, and parametric presets of Notre-Dame, Chartres,
-> Amiens & Cologne. No external 3D assets — every stone is code.
+> day/night lighting, synthesized bells, baked vertex-colour interior light, working doors
+> with wickets, weather, first-person collision, and parametric presets of Notre-Dame,
+> Chartres, Amiens & Cologne. No external 3D assets — every stone is code.
 > **Live demo:** https://church.bigcow.net
 
 ![全景](docs/overview.png)
@@ -53,6 +57,8 @@ URL 参数：`?view=3&section=1&labels=1&build=0.42&time=0.95&panel=1&tour=1&pre
 | `src/buttress.js` | 飞扶壁 = 扶壁墩 + 飞券 + 小尖塔 | 把拱顶的水平推力接力到侧廊之外，高墙才能开窗 |
 | `src/glass.js` | 柳叶窗与玫瑰窗的彩色玻璃 | Canvas 程序化铅条镶嵌；两套镶玻方案（`GLAZING`）差在图案密度与**透光率**；不发光材质模拟"窗自体发光"的哥特室内观感 |
 | `src/bake.js` / `src/grid.js` / `src/bakeworker.js` | 室内光照烘焙 | 静态的光离线算、运行时只查表——游戏里 lightmap 的做法（见下） |
+| `src/doors.js` | 门的开关 | 三档状态（关 / 便门 / 全开）、枢轴缓动、能不能从这道门过去的判断 |
+| `src/figure.js` | 门龛上的石像 | 一条剖面曲线沿竖轴放样成壳，周向压出竖直衣褶；每尊一个种子，没有两尊一样 |
 | `src/facade.js` | 西立面：双塔、三门廊、玫瑰窗、国王廊 | 平面（中厅+双侧廊）直接投影为立面上的三座门；三座门都通到室内——塔身底层是可穿行的开间，侧门穿塔底进侧廊 |
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面 | 逐开间（bay）装配——中世纪工地也是这样一跨一跨盖的 |
 | `src/materials.js` | 全部材质与程序化贴图 | 石缝、棋盘铺地、木门都用 Canvas 现画，无外部图片；贴图统一开各向异性过滤 |
@@ -77,6 +83,15 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 21 t
 ```
 
 ## 测试与检查
+
+四个检查器各查一类问题，当前基线（每次改几何都该重跑一遍）：
+
+| 查什么 | 工具 | 当前 |
+|---|---|---|
+| 共面重叠（z-fighting） | `check-zfight.mjs` | 严格共面 ≥0.2 m² **0 处** |
+| 画面抖动（真渲染微扰） | `check-flicker.mjs` | 完整外观 0.01–0.17%，剖面最高 0.32%，**无成片抖动** |
+| 下雨漏水 | `check-rain.mjs` | 垂直雨与八个风向 **0 处**（门开着时会照实报出来） |
+| 构件穿出外皮 | `check-poke.mjs` | 25 个机位 **0 处** |
 
 ```bash
 node test/smoke.mjs          # 无浏览器构建整个场景图，校验网格数与总高
@@ -132,8 +147,9 @@ node tools/check-flicker.mjs --pos=... --probe=255,345        # 只问：这个�
 依赖 `npm i puppeteer-core` 与本机的 `/usr/bin/google-chrome`（可用 `CHROME=` 覆盖）。
 取景页是 `tools/flicker.html`，光照、雾、地面、剖面都与 `main.js` 一致。
 
-当前基线：完整外观下抖动像素 ≤0.2%，且都是柱身与附柱相切处的一条条细线（构件真实
-相交，见上面那条长尾）；两档剖面下与完整外观同量级——**剖面不再有成片的抖动**。
+当前基线（18 个机位 × 800×500 全扫）：完整外观下 **0.01%–0.17%**，两档剖面下最高
+**0.32%**（横剖 + 中厅机位）；剩下的都是柱身与附柱相切处的一条条细线（构件真实相交，
+见上面那条长尾）——**没有成片的抖动**。
 
 ### 漏雨检查器（找"外面能看进来"的洞）
 
@@ -322,7 +338,8 @@ iOS 的 Safari 根本不支持它，取不到值时不能当成大内存机器�
 
 `tools/shot.html` 是取景页：与 `main.js` 同一套光照和地面，但相机由脚本指定，
 用 puppeteer 调 `window.__shot(px,py,pz, tx,ty,tz)` 与 `window.__sunAt(t)` 出图，
-适合定点比对某处改动。`docs/` 里的截图则直接用 URL 参数拍主站（`?view=1`…`?view=6`）。
+适合定点比对某处改动。`docs/` 里的截图直接用 URL 参数拍主站（`?view=1`…`?view=6`），
+**等烘焙跑完再拍**——第一张付一次烘焙的钱，后面几张走 IndexedDB 缓存。
 
 ## 部署
 
