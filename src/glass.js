@@ -11,7 +11,7 @@
 //            光是墙上的一批宝石，彩色几乎落不到石头上。
 //   late     14–16 世纪：白地 grisaille 菱形网 + 银黄（银盐烧出的黄）+ 少量彩边，
 //            铅条疏、透光率高——室内明亮，看得清结构。
-// transmit / tint 两个字段是给顶点色烘焙（tools/bake.js）用的：石头被窗子染成什么色。
+// transmit / tint 两个字段是给顶点色烘焙（src/bake.js）用的：石头被窗子染成什么色。
 
 import * as THREE from '../lib/three.module.js';
 import { canvasTexture, mulberry32, hasDOM } from './materials.js';

@@ -51,6 +51,8 @@
   #panel .row label { flex: 0 0 58px; }
   #panel .row span { flex: 0 0 56px; text-align: right; font-variant-numeric: tabular-nums; color: #ffd98f; }
   #panel input[type=range] { flex: 1; accent-color: #c9a24f; min-width: 0; }
+  #panel select { flex: 1; min-width: 0; background: rgba(0,0,0,.35); color: #efe7d6;
+                  border: 1px solid rgba(239,231,214,.25); border-radius: 4px; padding: 3px 4px; font: inherit; }
   #panel .apex { margin: 8px 0 2px; color: rgba(239,231,214,.75); }
   #panel .warn { margin: 6px 0 2px; color: #ff9b8a; }
   #panel .warn.hidden { display: none; }
@@ -193,6 +195,14 @@
     <input type="range" id="sunT" min="0" max="1" step="0.01" value="0.42">
     <span id="sunLabel">12:00</span>
   </div>
+  <h4>玻璃 <small>换一套镶玻</small></h4>
+  <div class="row"><label>镶玻</label>
+    <select id="pGlazing">
+      <option value="chartres">沙特尔式 · 12–13 世纪</option>
+      <option value="late">晚期银黄 · 14–16 世纪</option>
+    </select>
+  </div>
+  <p id="bakeInfo" class="apex"></p>
   <h4>设计参数 <small>改动即重建</small></h4>
   <div class="row"><label>中厅开间</label><input type="range" id="pBays" min="3" max="8" step="1"><span id="pBaysVal"></span></div>
   <div class="row"><label>起拱高</label><input type="range" id="pSpring" min="12" max="26" step="0.5"><span id="pSpringVal"></span></div>

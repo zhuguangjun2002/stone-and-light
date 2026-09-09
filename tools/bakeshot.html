@@ -5,10 +5,10 @@
 </script>
 <script type="module">
 // 烘焙前后的定点对照：与 main.js 同一套光照、雾、地面，相机由脚本指定；
-// __bake() 就地跑一遍顶点色烘焙（tools/bake.js），再拍同一机位即可 A/B 对照。
+// __bake() 就地跑一遍顶点色烘焙（src/bake.js），再拍同一机位即可 A/B 对照。
 import * as THREE from '../lib/three.module.js';
 import { buildCathedral } from '../src/cathedral.js';
-import { bakeVertexLight } from './bake.js';
+import { bakeVertexLight, applyBakedColors } from '../src/bake.js';
 import { P } from '../src/params.js';
 
 const q = new URLSearchParams(location.search);
@@ -59,9 +59,11 @@ window.__bake = (cfg = {}) => {                                 // 烘焙一遍�
   const it = bakeVertexLight(scene, { rays: cfg.rays ?? 32, box, bounce: cfg.bounce, floor: cfg.floor });
   let r = it.next(), last = 0;
   while (!r.done) { last = r.value.done; r = it.next(); }
+  applyBakedColors(scene, r.value.colors);
   // 烘焙接管了"室内间接光"，就该把原来那三盏假点光收小，否则会把烘出来的层次冲掉
   for (const p of pts) p.intensity = cfg.points ?? 110;
-  return { ...r.value, last };
+  const { colors, ...stat } = r.value;
+  return { ...stat, last };
 };
 window.__shot = (cfg) => {
   renderer.setSize(cfg.w, cfg.h);

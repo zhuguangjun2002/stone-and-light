@@ -4,6 +4,7 @@
 import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { buildCathedral } from './cathedral.js';
+import { applyBakedColors, bakeableMeshes } from './bake.js';
 import { canvasTexture } from './materials.js';
 import { P, recomputeDerived } from './params.js';
 import { archApex } from './gothic.js';
@@ -43,10 +44,15 @@ sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
 sun.shadow.camera.near = 20; sun.shadow.camera.far = 350;
 sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
+// 室内那三盏点光是"没有间接光时的替身"。烘焙一旦生效就该调暗，否则会把烘出来的
+// 层次冲平（现在的又平又匀，就是它们照的）。
+const PT_RAW = 220, PT_BAKED = 110;
+const interiorLights = [];
 for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
-  const p = new THREE.PointLight('#ffd9a0', 220, 70, 2);
+  const p = new THREE.PointLight('#ffd9a0', PT_RAW, 70, 2);
   p.position.set(x, y, z);
   scene.add(p);
+  interiorLights.push(p);
 }
 
 const _c1 = new THREE.Color(), _c2 = new THREE.Color(), _c3 = new THREE.Color();
@@ -264,6 +270,110 @@ function mountCathedral() {
   });
   applySection(SECTIONS[sectionIdx].planes);
   computeBuildOrder();
+  startBake();
+}
+
+// ---------- 室内光照烘焙（顶点色） ----------
+// 静态的光离线算、运行时只查表，就是游戏里 lightmap 的做法。这里把活分给几个
+// Worker：每个 Worker 自己建一遍教堂、烘 index % n === k 的那些网格，结果按下标
+// 拼回来。算过的结果按参数指纹存进 IndexedDB，下次进站直接贴上去。
+const BAKE_VER = 1;
+let bakeJob = 0, bakeWorkers = [];
+const bakeInfoEl = () => document.getElementById('bakeInfo');
+const bakeKey = () => `v${BAKE_VER}:` + JSON.stringify(P);
+
+function idb() {
+  return new Promise((res, rej) => {
+    const q = indexedDB.open('stone-and-light', 1);
+    q.onupgradeneeded = () => q.result.createObjectStore('bake');
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+async function cacheGet(key) {
+  try {
+    const db = await idb();
+    return await new Promise((res) => {
+      const r = db.transaction('bake').objectStore('bake').get(key);
+      r.onsuccess = () => res(r.result ?? null);
+      r.onerror = () => res(null);
+    });
+  } catch { return null; }
+}
+async function cachePut(key, val) {
+  try {
+    const db = await idb();
+    const st = db.transaction('bake', 'readwrite').objectStore('bake');
+    const all = st.getAllKeys();                  // 一份两三兆，留最近四份就够（够两套玻璃来回切）
+    all.onsuccess = () => {
+      const ks = all.result.filter((k) => k !== key);
+      for (let i = 0; i <= ks.length - 4; i++) st.delete(ks[i]);
+      st.put(val, key);
+    };
+  } catch { /* 隐私模式下没有 IndexedDB，算了 */ }
+}
+
+function applyBake(colors) {
+  applyBakedColors(root, colors);
+  for (const p of interiorLights) p.intensity = PT_BAKED;
+}
+function stopBake() {
+  for (const w of bakeWorkers) w.terminate();
+  bakeWorkers = [];
+}
+async function startBake() {
+  stopBake();
+  for (const p of interiorLights) p.intensity = PT_RAW;   // 还没烘好之前先照亮
+  if (q.get('bake') === '0' || typeof Worker === 'undefined') return;
+  const job = ++bakeJob, key = bakeKey();
+  const el = bakeInfoEl();
+  if (el) el.textContent = '室内光照：准备烘焙…';
+
+  const hit = await cacheGet(key);
+  if (job !== bakeJob) return;
+  if (hit && hit.meshes === bakeableMeshes(root).length) {
+    const colors = new Array(hit.meshes).fill(null);
+    hit.idx.forEach((mi, k) => { colors[mi] = hit.colors[k]; });
+    applyBake(colors);
+    if (el) el.textContent = '室内光照：已烘焙（缓存）';
+    return;
+  }
+
+  // 每个 Worker 都要自己建一遍教堂加射线网格，几十兆内存——按内存和核数一起限，
+  // 手机上再把射线数减半（慢一点，但不至于把内存撑爆）。
+  const mem = navigator.deviceMemory ?? 8;
+  const n = Math.max(1, Math.min(mem <= 4 ? 2 : 4, (navigator.hardwareConcurrency || 4) - 1));
+  const rays = innerWidth < 700 || mem <= 4 ? 16 : 32;
+  const total = bakeableMeshes(root).length;
+  const colors = new Array(total).fill(null);
+  const idx = [], flat = [];
+  const prog = new Array(n).fill(0), progTotal = new Array(n).fill(0);
+  const t0 = performance.now();
+  let left = n;
+  if (el) el.textContent = '室内光照：烘焙中 0%';
+  for (let k = 0; k < n; k++) {
+    const w = new Worker(new URL('./bakeworker.js', import.meta.url), { type: 'module' });
+    bakeWorkers.push(w);
+    w.onmessage = (ev) => {
+      if (job !== bakeJob) return;
+      const d = ev.data;
+      if (d.progress) {
+        prog[k] = d.progress.done; progTotal[k] = d.progress.total;
+        const a = prog.reduce((x, y) => x + y, 0), b = progTotal.reduce((x, y) => x + y, 0);
+        if (el && b) el.textContent = `室内光照：烘焙中 ${Math.round(100 * a / b)}%`;
+        return;
+      }
+      d.idx.forEach((mi, i) => { colors[mi] = d.colors[i]; idx.push(mi); flat.push(d.colors[i]); });
+      w.terminate();
+      if (--left) return;
+      applyBake(colors);
+      const secs = ((performance.now() - t0) / 1000).toFixed(1);
+      if (el) el.textContent = `室内光照：已烘焙（${secs} s）`;
+      cachePut(key, { meshes: total, idx, colors: flat });
+    };
+    w.onerror = () => { if (el) el.textContent = '室内光照：烘焙失败（用替身光照）'; stopBake(); };
+    w.postMessage({ params: { ...P }, slice: { k, n }, rays });
+  }
 }
 
 // ---------- 剖面 ----------
@@ -518,6 +628,13 @@ const PARAM_SLIDERS = [
   ['towerH', 'pTower', (v) => `${v} m`],
 ];
 let rebuildTimer = 0;
+function setGlazing(style) {
+  if (P.glazing === style) return;
+  P.glazing = style;
+  if (build.active) setBuildActive(false);
+  disposeCathedral();
+  mountCathedral();
+}
 function readPanelAndRebuild() {
   for (const [key, id] of PARAM_SLIDERS) P[key] = Number(document.getElementById(id).value);
   recomputeDerived();
@@ -527,6 +644,7 @@ function readPanelAndRebuild() {
   updatePanelReadout();
 }
 function updatePanelReadout() {
+  document.getElementById('pGlazing').value = P.glazing;
   for (const [key, id, fmt] of PARAM_SLIDERS) {
     const el = document.getElementById(id);
     el.value = P[key];
@@ -587,6 +705,7 @@ function wirePanel() {
       rebuildTimer = setTimeout(readPanelAndRebuild, 350);
     });
   }
+  document.getElementById('pGlazing').addEventListener('change', (e) => setGlazing(e.target.value));
   document.getElementById('sunT').addEventListener('input', (e) => setSunTime(Number(e.target.value)));
   document.getElementById('playBtn').addEventListener('click', () => {
     build.playing = !build.playing;
