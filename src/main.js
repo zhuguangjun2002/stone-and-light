@@ -278,7 +278,7 @@ function mountCathedral() {
 // Worker：每个 Worker 自己建一遍教堂、烘 index % n === k 的那些网格，结果按下标
 // 拼回来。算过的结果按参数指纹存进 IndexedDB，下次进站直接贴上去。
 const BAKE_VER = 1;
-let bakeJob = 0, bakeWorkers = [];
+let bakeJob = 0, bakeWorkers = [], baking = false;
 const bakeInfoEl = () => document.getElementById('bakeInfo');
 const bakeKey = () => `v${BAKE_VER}:` + JSON.stringify(P);
 
@@ -320,6 +320,7 @@ function applyBake(colors) {
 function stopBake() {
   for (const w of bakeWorkers) w.terminate();
   bakeWorkers = [];
+  baking = false;
 }
 async function startBake() {
   stopBake();
@@ -341,8 +342,11 @@ async function startBake() {
 
   // 每个 Worker 都要自己建一遍教堂加射线网格，几十兆内存——按内存和核数一起限，
   // 手机上再把射线数减半（慢一点，但不至于把内存撑爆）。
+  // 本机实测（8 线程）：4 个 Worker 17 s、6 个 12.5 s、8 个 13.5 s——超线程吃满之后
+  // 反而变慢，6 个是拐点。
   const mem = navigator.deviceMemory ?? 8;
-  const n = Math.max(1, Math.min(mem <= 4 ? 2 : 4, (navigator.hardwareConcurrency || 4) - 1));
+  const cores = navigator.hardwareConcurrency || 4;
+  const n = Math.max(1, Math.min(mem <= 4 ? 2 : mem <= 8 ? 3 : 6, cores - 1));
   const rays = innerWidth < 700 || mem <= 4 ? 16 : 32;
   const total = bakeableMeshes(root).length;
   const colors = new Array(total).fill(null);
@@ -350,6 +354,7 @@ async function startBake() {
   const prog = new Array(n).fill(0), progTotal = new Array(n).fill(0);
   const t0 = performance.now();
   let left = n;
+  baking = true;
   if (el) el.textContent = '室内光照：烘焙中 0%';
   for (let k = 0; k < n; k++) {
     const w = new Worker(new URL('./bakeworker.js', import.meta.url), { type: 'module' });
@@ -364,9 +369,11 @@ async function startBake() {
         return;
       }
       d.idx.forEach((mi, i) => { colors[mi] = d.colors[i]; idx.push(mi); flat.push(d.colors[i]); });
+      applyBakedColors(root, colors);            // 边算边贴：哪一片算完哪一片先亮起来
       w.terminate();
       if (--left) return;
       applyBake(colors);
+      baking = false;
       const secs = ((performance.now() - t0) / 1000).toFixed(1);
       if (el) el.textContent = `室内光照：已烘焙（${secs} s）`;
       cachePut(key, { meshes: total, idx, colors: flat });
@@ -812,8 +819,16 @@ addEventListener('resize', () => {
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();
 let firstFrame = true;
+let lastDraw = 0;
 function animate() {
   requestAnimationFrame(animate);
+  // 烘焙时把帧率压到 ~12 fps：这个场景一帧一千两百多个 draw call，主线程本身就吃满
+  // 一个核，跟 Worker 抢 CPU 会把烘焙拖慢一倍还多。反正这会儿画面基本是静止的。
+  if (baking && !fly && !tour.active && !walk.active) {
+    const now = performance.now();
+    if (now - lastDraw < 80) return;
+    lastDraw = now;
+  }
   const dt = Math.min(clock.getDelta(), 0.1);
   if (fly) {
     fly.t += dt;
