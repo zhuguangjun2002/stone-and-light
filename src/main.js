@@ -610,6 +610,19 @@ function flyTo(v, dur = 1.6) {
   toast(v.name);
 }
 
+// ---------- UI 缩放 ----------
+// 档位由 CSS 的媒体查询按屏宽给（--ui-auto），这里只记一个**相对倍数**（--ui-boost）。
+// 记倍数而不是记绝对值：换一块屏幕时自动档仍然生效，不会把手机上的界面撑爆。
+let uiBoost = Number(localStorage.getItem('uiBoost')) || 1;
+const cssNum = (n) => Number(getComputedStyle(document.documentElement).getPropertyValue(n)) || 1;
+function applyUIBoost(v) {
+  uiBoost = Math.max(0.6, Math.min(2.2, v));
+  document.documentElement.style.setProperty('--ui-boost', uiBoost.toFixed(2));
+  localStorage.setItem('uiBoost', String(uiBoost));
+  return cssNum('--ui-auto') * uiBoost;
+}
+if (uiBoost !== 1) applyUIBoost(uiBoost);
+
 // ---------- UI ----------
 const toastEl = document.getElementById('toast');
 let toastTimer = 0;
@@ -747,6 +760,12 @@ function doAction(name) {
       break;
     case 'mute': toast(audio.toggleMute() ? '静音' : '声音开'); break;
     case 'help': document.getElementById('help').classList.toggle('hidden'); break;
+    case 'uiSmaller':
+    case 'uiBigger': {
+      const eff = applyUIBoost(uiBoost + (name === 'uiBigger' ? 0.12 : -0.12));
+      toast(`界面缩放 ${Math.round(eff * 100)}%`);
+      break;
+    }
   }
 }
 
@@ -754,6 +773,7 @@ function doAction(name) {
 const CODE_ACTIONS = {
   KeyT: 'tour', KeyB: 'build', KeyF: 'walk', KeyP: 'panel',
   KeyC: 'section', KeyL: 'labels', KeyG: 'bell', KeyO: 'organ', KeyM: 'mute', KeyH: 'help',
+  Minus: 'uiSmaller', Equal: 'uiBigger',
 };
 addEventListener('keydown', (e) => {
   audio.ensure();
