@@ -63,9 +63,11 @@ export function flyingButtress(sideSign, wallX, pierX, P, mats) {
   for (let i = 1; i <= 3; i++) {
     const phi = (i / 4) * Math.PI / 2;
     const x = wx + A * Math.sin(phi), y = yT + B * Math.cos(phi);
+    // 小柱要骑在券背上：下端埋进券里 0.4、上端露出 1.1。原来上端按另一条直线插值，
+    // 靠下的两根整根都缩到券背线以下、埋进券里，只从券面上戳出几厘米的一小片——
+    // 远看就是券面上一块孤零零的小色斑（tools/check-poke.mjs 报的就是它）。
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.5, 0.5), mats.stoneLight);
-    const topY = yH + 0.8 + (yT + 1.1 - (yH + 0.8)) * Math.sin(phi);
-    post.position.set(s * x, (y + topY) / 2 + 0.3, 0);
+    post.position.set(s * x, y + 0.35, 0);
     grp.add(post);
   }
   return grp;

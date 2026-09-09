@@ -83,12 +83,25 @@ export function* scanLeaks(scene, opt = {}) {
       const t = probe(_o, d);
       if (t === Infinity) esc++; else if (t < NEAR) near++;
     }
-    // 头顶正上方还要真有片屋面挡着：扶壁之间那种露天的深角落，天空可见度也很低，
-    // 但抬头就是天，雨落在那儿是天经地义，不能算漏。
-    const roof = probe(_o, _up) !== Infinity;
-    return { open: esc / dirs.length, tight: near / dirs.length, roof };
+    return { open: esc / dirs.length, tight: near / dirs.length };
   };
-  const indoors = (f) => f.open < skyThresh && f.tight < (opt.tightMax ?? 0.6) && f.roof;
+  // 头顶是不是罩着一片东西：正上方 + 一圈 20°/35° 的斜上方，共 9 条。
+  // 不能要求"全被挡住"——雨恰恰是从头顶那个口子进来的，正上方那条往往正好跑掉；
+  // 也不能只看一条——飞券、券脚从头顶掠过也会挡住。取七成为界。
+  const UP = [new THREE.Vector3(0, 1, 0)];
+  for (const el of [20, 35]) {
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2 + (el === 35 ? Math.PI / 4 : 0), t = Math.tan(el * Math.PI / 180);
+      UP.push(new THREE.Vector3(t * Math.cos(a), 1, t * Math.sin(a)).normalize());
+    }
+  }
+  const coverFrac = (p) => {
+    _o.copy(p).addScaledVector(dir, -0.05);
+    let n = 0;
+    for (const d of UP) if (probe(_o, d) !== Infinity) n++;
+    return n / UP.length;
+  };
+  const indoors = (f) => f.open < skyThresh && f.tight < (opt.tightMax ?? 0.6);
 
   const nx = Math.round((x1 - x0) / step) + 1, nz = Math.round((z1 - z0) / step) + 1;
   const total = nx * nz;
@@ -97,7 +110,15 @@ export function* scanLeaks(scene, opt = {}) {
   const skyv = new Float32Array(total).fill(NaN);
   const hitObj = new Array(total).fill(null);
   const t = topY / -dir.y;                           // 从 topY 落到 y=0 要走多远
-  const s = new THREE.Vector3();
+  const s = new THREE.Vector3(), _n = new THREE.Vector3(), _m3 = new THREE.Matrix3();
+  // 落面朝不朝上：雨打在竖墙、玻璃上会顺着流走，只有朝上的面（拱顶背、夹层楼板、
+  // 窗台、地坪）才存得住水，也才谈得上"漏"。
+  const faceUp = (h) => {
+    if (!h.face) return true;
+    _n.copy(h.face.normal).applyNormalMatrix(_m3.getNormalMatrix(h.object.matrixWorld)).normalize();
+    if (_n.dot(dir) > 0) _n.negate();                  // 法线拧到迎着雨的一侧
+    return _n.y > (opt.upMin ?? 0.3);
+  };
 
   let done = 0;
   for (let i = 0; i < total; i++) {
@@ -111,11 +132,12 @@ export function* scanLeaks(scene, opt = {}) {
       land[i * 3] = h.point.x; land[i * 3 + 1] = h.point.y; land[i * 3 + 2] = h.point.z;
       hitObj[i] = h.object;
       skyv[i] = 1;
-      // 落在大地、广场上的不用问——那本来就是露天的；落在檐口以上的也不用问
-      if (!h.object.userData.outdoor && h.point.y < (opt.eaveY ?? 30.6)) {
+      // 落在大地、广场上的不用问——那本来就是露天的；落在檐口以上的也不用问。
+      // 先看头顶有没有罩着（5 条射线，便宜），罩着了再问天空可见度（20 条，贵）。
+      if (!h.object.userData.outdoor && h.point.y < (opt.eaveY ?? 30.6) && faceUp(h) && coverFrac(h.point) >= (opt.coverMin ?? 0.9)) {
         const f = sky(h.point);
         skyv[i] = f.open;
-        if (indoors(f)) leak[i] = 1;
+        if (f.tight < (opt.tightMax ?? 0.6)) leak[i] = indoors(f) ? 1 : 2;
       }
     }
     if (++done % chunk === 0) yield { done, total };
@@ -125,6 +147,7 @@ export function* scanLeaks(scene, opt = {}) {
   const seen = new Uint8Array(total), clusters = [];
   for (let i = 0; i < total; i++) {
     if (!leak[i] || seen[i]) continue;
+    const kind = leak[i];                              // 1 = 落进封闭空间；2 = 钻到屋面下方
     const stack = [i]; seen[i] = 1;
     const cell = [];
     while (stack.length) {
@@ -134,7 +157,7 @@ export function* scanLeaks(scene, opt = {}) {
         const ax = kx + dx, az = kz + dz;
         if (ax < 0 || az < 0 || ax >= nx || az >= nz) continue;
         const a = az * nx + ax;
-        if (leak[a] && !seen[a]) { seen[a] = 1; stack.push(a); }
+        if (leak[a] === kind && !seen[a]) { seen[a] = 1; stack.push(a); }
       }
     }
     const c = new THREE.Vector3(), box = new THREE.Box3();
@@ -143,10 +166,10 @@ export function* scanLeaks(scene, opt = {}) {
       c.add(p); box.expandByPoint(p);
     }
     c.divideScalar(cell.length);
-    clusters.push({ drops: cell.length, area: cell.length * step * step, center: c, box, cells: cell,
+    clusters.push({ kind, drops: cell.length, area: cell.length * step * step, center: c, box, cells: cell,
       hit: hitObj[cell[0]], sky: skyv[cell[0]] });
   }
-  clusters.sort((a, b) => b.area - a.area);
+  clusters.sort((a, b) => (a.kind - b.kind) || (b.area - a.area));
 
   // ---------- 找"雨是从哪个口子进来的" ----------
   // 沿雨滴的轨迹从天上往落点二分：天空可见度从高变低的那一段，就是它钻进来的口子。
@@ -157,7 +180,7 @@ export function* scanLeaks(scene, opt = {}) {
     for (let k = 0; k < 9; k++) {
       const mid = (lo + hi) / 2;
       const pm = p0.clone().lerp(p1, mid);
-      if (indoors(sky(pm))) hi = mid; else lo = mid;
+      if (coverFrac(pm) >= (opt.coverMin ?? 0.9)) hi = mid; else lo = mid;
       yield { done, total };
     }
     cl.entry = p0.clone().lerp(p1, hi);

@@ -1,0 +1,169 @@
+<!doctype html><meta charset="utf-8"><title>穿刺检测取景页</title>
+<style>html,body{margin:0;overflow:hidden;background:#000}</style>
+<script type="importmap">
+  { "imports": { "three": "../lib/three.module.js" } }
+</script>
+<script type="module">
+// 查"露出来的部分"：某块构件的一小角戳穿了外皮（屋面、墙面），在大片外皮当中留下
+// 一个孤零零的小色块。做法是把每块网格涂成自己的编号色渲染一遍（ID 图），找出
+// **被同一块大面包围的小岛**；再打两条射线比深度——小岛与外皮的距离几乎相同 = 真的
+// 插在里面（穿刺）；差得远 = 只是前面挡着的小尖塔之类，正常遮挡。
+import * as THREE from '../lib/three.module.js';
+import { buildCathedral } from '../src/cathedral.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.NoToneMapping;              // ID 图要原样的颜色
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);            // 天空 = 全白，解码成一个不存在的编号
+const { root } = buildCathedral();
+scene.add(root);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48), new THREE.MeshBasicMaterial());
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.userData.tag = '大地';
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190), new THREE.MeshBasicMaterial());
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20); plaza.userData.tag = '广场';
+scene.add(ground, plaza);
+scene.updateMatrixWorld(true);
+
+// ---------- 每块网格一个编号色（每档 4，容得下 ±1 的取整误差） ----------
+const meshes = [];
+scene.traverse((o) => {
+  if (!o.isMesh || !o.geometry?.attributes?.position) return;
+  const m = Array.isArray(o.material) ? o.material[0] : o.material;
+  if (m && m.depthWrite === false) { o.visible = false; return; }   // 光柱光斑不算外皮
+  meshes.push(o);
+});
+const idMat = meshes.map((o, i) => {
+  const c = new THREE.Color();
+  c.setRGB(((i % 64) * 4) / 255, ((((i / 64) | 0) % 64) * 4) / 255, ((((i / 4096) | 0) % 64) * 4) / 255,
+    THREE.SRGBColorSpace);
+  return new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide });
+});
+const orig = meshes.map((o) => o.material);
+// 玻璃嵌在洞口里，本来就是"被墙包着的一小块"，不是穿刺；这个工程里玻璃材质的标志
+// 是 toneMapped === false
+const isGlass = meshes.map((o, i) => {
+  const m = Array.isArray(orig[i]) ? orig[i][0] : orig[i];
+  return !!m && m.toneMapped === false;
+});
+const SKY = -1;
+const decode = (r, g, b) => {
+  const q = (v) => Math.round(v / 4);
+  if (r > 250 && g > 250 && b > 250) return SKY;
+  const i = q(r) + q(g) * 64 + q(b) * 4096;
+  return i >= 0 && i < meshes.length ? i : SKY;
+};
+function describe(i) {
+  const o = meshes[i];
+  const m = Array.isArray(orig[i]) ? orig[i][0] : orig[i];
+  const box = new THREE.Box3().setFromObject(o);
+  return { tag: o.userData.tag || o.name || '', geo: o.geometry.type,
+    col: m?.color?.getHexString?.() ?? '',
+    min: box.min.toArray().map((v) => +v.toFixed(1)), max: box.max.toArray().map((v) => +v.toFixed(1)) };
+}
+
+const rc = new THREE.Raycaster();
+let W = 900, H = 640, rt = null, cam = null;
+function hitAt(px, py) {                                 // py 自下而上，与读回的像素一致
+  rc.setFromCamera(new THREE.Vector2(px / W * 2 - 1, py / H * 2 - 1), cam);
+  const h = rc.intersectObject(scene, true).find((x) => x.object.visible);
+  return h || null;
+}
+
+window.__idscan = (cfg) => {
+  W = cfg.w; H = cfg.h;
+  if (rt) rt.dispose();
+  rt = new THREE.WebGLRenderTarget(W, H, { samples: 0 });
+  rt.texture.colorSpace = THREE.SRGBColorSpace;          // 渲染到贴图时用的是贴图的色彩空间，
+                                                         // 不设这一行读回来的是线性值，编号就解错了
+  renderer.setSize(W, H);
+  cam = new THREE.PerspectiveCamera(cfg.fov ?? 50, W / H, 0.5, 2000);
+  cam.position.set(...cfg.pos); cam.lookAt(...cfg.tgt); cam.updateMatrixWorld(true);
+
+  meshes.forEach((o, i) => { o.material = idMat[i]; });
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, cam);
+  const buf = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf);
+  renderer.setRenderTarget(null);
+  meshes.forEach((o, i) => { o.material = orig[i]; });
+
+  const id = new Int32Array(W * H);
+  const seenPx = new Map();                              // 每块网格在这一帧里一共露了多少像素
+  for (let i = 0; i < W * H; i++) {
+    const v = decode(buf[i * 4], buf[i * 4 + 1], buf[i * 4 + 2]);
+    id[i] = v;
+    if (v !== SKY) seenPx.set(v, (seenPx.get(v) ?? 0) + 1);
+  }
+
+  // ---------- 连通块 ----------
+  const comp = new Int32Array(W * H).fill(-1);
+  const comps = [];
+  const stack = [];
+  for (let s = 0; s < W * H; s++) {
+    if (comp[s] >= 0) continue;
+    const myId = id[s], ci = comps.length;
+    const c = { id: myId, n: 0, sx: 0, sy: 0, border: false, edge: new Map() };
+    comps.push(c);
+    stack.push(s); comp[s] = ci;
+    while (stack.length) {
+      const k = stack.pop();
+      const x = k % W, y = (k / W) | 0;
+      c.n++; c.sx += x; c.sy += y;
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1) c.border = true;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const a = ny * W + nx;
+        if (id[a] === myId) { if (comp[a] < 0) { comp[a] = ci; stack.push(a); } }
+        else c.edge.set(id[a], (c.edge.get(id[a]) ?? 0) + 1);       // 记边界上贴着谁
+      }
+    }
+  }
+
+  // ---------- 挑"被一大片外皮包住的小岛" ----------
+  const maxPx = cfg.maxPx ?? Math.round(W * H * 0.004);
+  const out = [];
+  let mism = 0;
+  for (const c of comps) {
+    if (c.id === SKY || c.border || c.n < (cfg.minPx ?? 6) || c.n > maxPx) continue;
+    let host = -1, hostN = 0, tot = 0;
+    for (const [k, v] of c.edge) { tot += v; if (v > hostN) { hostN = v; host = k; } }
+    if (host === SKY || host < 0 || hostN / tot < (cfg.enclose ?? 0.8)) continue;
+    if (host === c.id) continue;
+    const cx = Math.round(c.sx / c.n), cy = Math.round(c.sy / c.n);
+    // 深度比对：小岛中心 与 外皮上离它最近的几个点
+    const hIn = hitAt(cx + 0.5, cy + 0.5);
+    if (!hIn) continue;
+    if (hIn.object !== meshes[c.id]) { mism++; continue; }   // ID 图与射线对不上，跳过（自检）
+    if (isGlass[c.id]) continue;
+    let hOut = null, best = 1e9;
+    for (let r = 3; r <= 24 && !hOut; r += 3) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const x = cx + dx * r, y = cy + dy * r;
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        if (id[y * W + x] !== host) continue;
+        const h = hitAt(x + 0.5, y + 0.5);
+        if (h && Math.abs(h.distance - hIn.distance) < best) { best = Math.abs(h.distance - hIn.distance); hOut = h; }
+      }
+    }
+    if (!hOut) continue;
+    const signed = hOut.distance - hIn.distance;         // >0 = 小岛在外皮前面（戳出来）
+    if (signed < 0.01) continue;                         // 陷在里面的：窗玻璃嵌在洞里，正常
+    if (c.n / (seenPx.get(c.id) ?? c.n) < 0.6) continue; // 这块网格在别处也大片露着 = 贴面的装饰板，不是穿刺
+    out.push({
+      signed: +signed.toFixed(3),
+      px: c.n, at: [cx, H - 1 - cy], gap: +best.toFixed(3), dist: +hIn.distance.toFixed(1),
+      point: hIn.point.toArray().map((v) => +v.toFixed(2)),
+      island: describe(c.id), host: describe(host),
+      islandIdx: c.id, hostIdx: host,
+    });
+  }
+  out.sort((a, b) => b.px - a.px);
+  return { comps: comps.length, islands: out, mismatch: mism };
+};
+window.__ready = true;
+</script>

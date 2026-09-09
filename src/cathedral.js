@@ -427,14 +427,38 @@ function buildApse(root, mats, glassMats, labels, vaultMats) {
   // 屋面：上层半锥 + 回廊环坡（半锥朝东，θ 从 π/2 起转 π，只盖 z<0 一侧）
   // 半锥的切面要往歌坛屋面里搭 0.6 m：原来切面在 zc-0.4、歌坛屋面端面在 zc，
   // 中间空着 0.4 m 的缝，从上面看就是一道贯通的裂口，雨直接灌进后殿。
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(rU + 1.6, 7, 12, 1, false, Math.PI / 2, Math.PI), mats.roof);
+  // 半径要盖得住多边形墙的**角**：墙是 5 面折线（外皮半径 rU+0.5，转角处还要更远
+  // sqrt(外皮² + 半面宽²)），锥面又是 12 边形（平面处比外接圆矮 cos(π/12)）。
+  // 原来 rU+1.6 只比墙外皮大一点，墙角就从锥面里戳出来——远看是屋面上一片小尖角。
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(rU + 2.4, 7, 12, 1, false, Math.PI / 2, Math.PI), mats.roof);
   cone.position.set(0, P.naveWallTop + 3.2, zc + 0.6);
   cone.castShadow = true;
   root.add(cone);
-  const ring = new THREE.Mesh(new THREE.ConeGeometry(rL + 1.2, 5.5, 14, 1, false, Math.PI / 2, Math.PI), mats.roof);
+  const ring = new THREE.Mesh(new THREE.ConeGeometry(rL + 2.1, 5.5, 14, 1, false, Math.PI / 2, Math.PI), mats.roof);   // 同上，回廊环坡也要盖住下层墙的转角
   ring.position.set(0, P.aisleWallTop + 2.2, zc + 0.6);
   ring.castShadow = true;
   root.add(ring);
+
+  // 歌坛侧廊单坡屋面到回廊环坡之间是一道错台：单坡的檐口比环坡高出半米到两米，
+  // 从外面斜着看能看进两片屋面之间的空当（雨进不去——单坡屋面在 z = choirZ1 有端面
+  // 封着，落进空当的水淌到环坡上就流走了——但看着像个破口）。现实中这种交接是铺
+  // 铅皮泛水盖住的，这里补一片封头板当泛水。
+  const ringApexY = P.aisleWallTop + 2.2 + 2.75, ringSlope = 5.5 / (rL + 2.1);
+  const shedY = (x) => P.aisleWallTop + 0.3 + (P.outerX + 0.3 - x) / (P.outerX + 0.3 - (P.aisleIn + 0.1))
+    * (P.aisleRoofHi - P.aisleWallTop - 0.3);           // 单坡屋面的上表面
+  for (const sx of [1, -1]) {
+    const x0 = P.aisleIn + 0.1, x1 = P.outerX + 0.7;
+    const sh = new THREE.Shape();
+    sh.moveTo(sx * x0, shedY(x0));
+    sh.lineTo(sx * x1, shedY(x1));
+    sh.lineTo(sx * x1, ringApexY - ringSlope * x1 - 0.3);   // 下缘埋进环坡里 0.3
+    sh.lineTo(sx * x0, ringApexY - ringSlope * x0 - 0.3);
+    sh.closePath();
+    const flash = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.2, bevelEnabled: false }), mats.roof);
+    flash.position.z = zc - 0.25;                        // 贴在单坡屋面端面外侧，别与端面共面
+    flash.castShadow = flash.receiveShadow = true;
+    root.add(flash);
+  }
 
   // 后殿拱顶近似：半锥形天花
   const apseVault = new THREE.Mesh(
