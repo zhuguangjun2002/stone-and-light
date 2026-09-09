@@ -5,7 +5,8 @@ import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { buildCathedral } from './cathedral.js';
 import { applyBakedColors, bakeableMeshes } from './bake.js';
-import { collectDoors, setDoorState, nextState, updateDoors, STATE_NAMES } from './doors.js';
+import { collectDoors, setDoorState, nextState, updateDoors, doorBlocks, STATE_NAMES } from './doors.js';
+import { buildGrid } from './grid.js';
 import { canvasTexture } from './materials.js';
 import { P, recomputeDerived } from './params.js';
 import { archApex } from './gothic.js';
@@ -276,6 +277,7 @@ function mountCathedral() {
   doors = collectDoors(root);
   setAllDoors(WEATHER[weather].doors, true);
   buildDoorPlan();
+  buildCollision();
   startBake();
 }
 
@@ -488,6 +490,39 @@ function buildDoorPlan() {
   refreshDoorUI();
 }
 
+// ---------- 碰撞 ----------
+// 拿烘焙用的那张射线网格当碰撞体：走的时候朝前打两条射线（腰、头各一条），
+// 撞上就把这个方向的位移吃掉，再分轴各试一次——贴着墙走就会自然滑过去。
+// 门扇会转，不进网格；关着的门单独用平面判（见 doors.js 的 doorBlocks）。
+let collGrid = null;
+const PLAYER_R = 0.38;
+function buildCollision() {
+  const hidden = [];
+  for (const d of doors) for (const p of [...d.leaves, ...d.wickets]) {
+    p.traverse((o) => { if (o.isMesh && o.visible) { o.visible = false; hidden.push(o); } });
+  }
+  try {
+    collGrid = buildGrid(root, { cell: 1.4 });
+  } catch { collGrid = null; }
+  for (const o of hidden) o.visible = true;
+}
+function hitsWall(x, z, dx, dz, len) {
+  if (!collGrid) return false;
+  const nx = dx / len, nz = dz / len;
+  for (const h of [0.55, 1.55]) {                 // 腰、头两个高度
+    const hit = collGrid.hit(x, h, z, nx, 0, nz, len + PLAYER_R);
+    if (hit && hit.t < len + PLAYER_R) return true;
+  }
+  return false;
+}
+function canStep(x, z, dx, dz) {
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-6) return true;
+  if (hitsWall(x, z, dx, dz, len)) return false;
+  for (const d of doors) if (doorBlocks(d, x, z, x + dx, z + dz)) return false;
+  return true;
+}
+
 // 第一人称：走到门前 4 m 内按 E 开关这一扇（大门就该是走过去推的）
 let nearDoor = null;
 function updateNearDoor() {
@@ -660,8 +695,13 @@ function updateWalk(dt) {
   if (walk.keys.has('KeyA')) { mx -= rx; mz -= rz; }
   const len = Math.hypot(mx, mz);
   if (len > 0) {
-    camera.position.x += (mx / len) * speed * dt;
-    camera.position.z += (mz / len) * speed * dt;
+    const sx = (mx / len) * speed * dt, sz = (mz / len) * speed * dt;
+    const { x, z } = camera.position;
+    if (canStep(x, z, sx, sz)) { camera.position.x += sx; camera.position.z += sz; }
+    else {                                        // 撞上了就分轴各试一次：贴着墙滑
+      if (canStep(x, z, sx, 0)) camera.position.x += sx;
+      if (canStep(camera.position.x, z, 0, sz)) camera.position.z += sz;
+    }
   }
   camera.position.y = 1.7;
 }

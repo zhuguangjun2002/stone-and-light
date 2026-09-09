@@ -243,6 +243,9 @@ export function buildCathedral() {
   for (const zc of bayCenters) {
     if (zc < P.naveZ0 + P.bay / 2) continue;      // 只放中厅，歌坛留给唱诗班
     for (const dz of [-2.1, 0, 2.1]) {
+      // 西门里侧留 2.8 m 空场：门扇开到 80° 会扫进来（真教堂这一跨也是空的，
+      // 进门先是一片过渡空间，长椅从第二跨才开始）
+      if (zc + dz > P.naveZ1 - 2.8) continue;
       for (const sx of [1, -1]) {
         const seat = new THREE.Mesh(seatG, pewMat);
         seat.position.set(sx * 2.75, 0.3, zc + dz);

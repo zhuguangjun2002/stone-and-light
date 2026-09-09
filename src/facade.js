@@ -104,10 +104,14 @@ export function doorAssembly(op, mats, cfg = {}) {
     leaf.castShadow = leaf.receiveShadow = true;
     pivot.add(leaf);
 
-    // 铁铰链带（strap hinge）：从门轴横伸过门板三分之二宽
+    // 铁铰链带（strap hinge）：从门轴横伸过门板三分之二宽。
+    // 碰上便门那道洞要收住——原来直接横穿过去，从便门里往外看是当中一道横杠。
+    const wx0 = wickCX - wickW / 2, wy0 = wickY0, wy1 = wickY0 + wickH;
     for (const hy of [doorH * 0.16, doorH * 0.55, doorH * 0.88]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(leafW * 0.66, 0.13, 0.03), mats.dark);
-      strap.position.set(side * (leafW / 2 - leafW * 0.33), hy - doorH / 2, T / 2 + 0.015);
+      let w = leafW * 0.66, x0 = side * leafW / 2;
+      if (hasWick && hy > wy0 - 0.1 && hy < wy1 + 0.1) w = Math.max(0.12, Math.abs(x0 - (wx0 - 0.02)));
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(w, 0.13, 0.03), mats.dark);
+      strap.position.set(x0 - side * w / 2, hy - doorH / 2, T / 2 + 0.015);
       leaf.add(strap);
     }
     // 门钉（躲开便门那块洞）
@@ -121,9 +125,16 @@ export function doorAssembly(op, mats, cfg = {}) {
         leaf.add(stud);
       }
     }
-    // 门环
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 6, 14), mats.dark);
-    ring.position.set(-side * (leafW / 2 - 0.28), doorH * 0.42 - doorH / 2, T / 2 + 0.05);
+    // 门环（sanctuary ring）：拉门用，也是中世纪"抓住它就受庇护"的那个环。
+    // 原来挂在 1.9 m 高，手够不着——降到 1.05 m，并补一块底板（真门环都钉在铁板上）。
+    const ringY = 1.05 - doorH / 2, ringX = -side * (leafW / 2 - 0.26);
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.02, 12), mats.dark);
+    plate.rotation.x = Math.PI / 2;
+    plate.position.set(ringX, ringY, T / 2 + 0.012);
+    leaf.add(plate);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.022, 6, 14), mats.dark);
+    ring.position.set(ringX, ringY - 0.06, T / 2 + 0.035);
+    ring.rotation.x = 0.5;
     leaf.add(ring);
 
     if (hasWick) {
@@ -137,18 +148,19 @@ export function doorAssembly(op, mats, cfg = {}) {
       }
       const wp = new THREE.Group();                // 便门自己的枢轴，可以单独开
       wp.position.set(wickCX - wickW / 2, wickY0 - doorH / 2, 0);
-      wp.userData.door = { side: -1, max: cfg.wicketMax ?? 1.45, wicket: true };   // 同理，别超过 90°
+      wp.userData.door = { side: -1, max: cfg.wicketMax ?? 1.45, wicket: true, width: wickW };   // 同理，别超过 90°
       leaf.add(wp);
       const wleaf = new THREE.Mesh(new THREE.BoxGeometry(wickW - 0.02, wickH - 0.02, T * 0.8), mats.door);
       wleaf.position.set(wickW / 2, wickH / 2, 0);
       wleaf.castShadow = true;
       wp.add(wleaf);
       const wring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.016, 6, 12), mats.dark);
-      wring.position.set(wickW / 2 - 0.16, 0, T * 0.4 + 0.02);
+      wring.position.set(wickW / 2 - 0.16, wickH * 0.05, T * 0.4 + 0.02);
       wleaf.add(wring);
     }
   }
   grp.userData.doorId = cfg.id ?? '';
+  grp.userData.doorHalf = doorA + REB;             // 门洞半宽，碰撞判断用
   return grp;
 }
 
