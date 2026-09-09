@@ -25,6 +25,98 @@ export function roseAssembly(r, mats, roseMat) {
   return grp;
 }
 
+// 一尊像：中世纪门龛上的人像都是"柱像"——瘦长、贴着柱子、衣褶竖直。
+// 用几个基本体拼：锥台身子（下宽上窄 = 长袍）、球头、两条贴身的臂、可选头光。
+// 远看只要轮廓对，就是一尊像；这个工程不引外部模型，人像也只能这么长出来。
+function makeFigure(h, mat, { seated = false, halo = false } = {}) {
+  const g = new THREE.Group();
+  const bodyH = h * (seated ? 0.6 : 0.74);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.072, h * 0.115, bodyH, 8), mat);
+  body.position.y = bodyH / 2;
+  g.add(body);
+  // 肩：身子顶上收一段，头才不像直接插在筒上
+  const sh = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.045, h * 0.082, h * 0.09, 8), mat);
+  sh.position.y = bodyH + h * 0.04;
+  g.add(sh);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(h * 0.062, 10, 8), mat);
+  head.position.y = bodyH + h * 0.125;
+  g.add(head);
+  for (const sx of [1, -1]) {                      // 双臂贴着身子
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.021, h * 0.021, bodyH * 0.6, 6), mat);
+    arm.position.set(sx * h * 0.082, bodyH * 0.6, h * 0.03);
+    arm.rotation.z = sx * 0.16;
+    g.add(arm);
+  }
+  if (halo) {                                      // 头光
+    const n = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.11, h * 0.11, 0.025, 12), mat);
+    n.rotation.x = Math.PI / 2;
+    n.position.set(0, bodyH + h * 0.125, -h * 0.04);
+    g.add(n);
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+// 柱像的托座与华盖：脚下一块托石（socle），头上一顶小尖顶（dais）——
+// 哥特门龛上的像几乎都有这两样，没有的话像是"贴"上去的。
+function statueNiche(h, mat, { canopy = true, halo = false } = {}) {
+  const g = new THREE.Group();
+  const socle = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.12, h * 0.145, h * 0.09, 8), mat);
+  socle.position.y = h * 0.045;
+  g.add(socle);
+  const fig = makeFigure(h, mat, { halo });
+  fig.position.y = h * 0.09;
+  g.add(fig);
+  if (canopy) {
+    // 华盖：小尖顶 + 一块托板，托板往墙里伸，看着是从墙上挑出来的，不是飘着的
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(h * 0.12, h * 0.18, 6), mat);
+    cap.position.set(0, h * 1.26, -h * 0.06);
+    g.add(cap);
+    const abacus = new THREE.Mesh(new THREE.BoxGeometry(h * 0.24, h * 0.04, h * 0.34), mat);
+    abacus.position.set(0, h * 1.15, -h * 0.09);
+    g.add(abacus);
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+// 门楣浮雕：《最后的审判》的标准构图——
+// 正中基督坐在杏仁形的**曼多拉（mandorla）**里，两侧天使托举；最下面紧贴过梁的一带
+// 最小，是复活的死者与"称量灵魂"。这里按浮雕做：把轮廓挤出几厘米贴在门楣板上。
+function tympanumRelief(innerA, lintelTop, apexY, mats, rich) {
+  const g = new THREE.Group();
+  const k = innerA / 1.9;                          // 按门洞大小整体缩放
+  const midY = lintelTop + (apexY - lintelTop) * 0.46;
+  const hw = 0.88 * k, hh = 1.75 * k;
+  const m = new THREE.Shape();                     // 杏仁形
+  m.moveTo(0, -hh);
+  m.quadraticCurveTo(hw * 1.35, 0, 0, hh);
+  m.quadraticCurveTo(-hw * 1.35, 0, 0, -hh);
+  const mand = new THREE.Mesh(new THREE.ExtrudeGeometry(m, { depth: 0.09, bevelEnabled: false }), mats.stone);
+  mand.position.set(0, midY, 0.16);
+  mand.castShadow = true;
+  g.add(mand);
+  const christ = makeFigure(2.05 * k, mats.stoneLight, { seated: true, halo: true });
+  christ.position.set(0, midY - hh * 0.78, 0.26);
+  g.add(christ);
+  if (rich) {
+    for (const sx of [1, -1]) {                    // 托举曼多拉的天使
+      const a = makeFigure(1.15 * k, mats.stoneLight);
+      a.position.set(sx * (hw + 0.62 * k), midY - hh * 0.55, 0.2);
+      a.rotation.y = -sx * 0.35;
+      g.add(a);
+    }
+    // 最下一带：复活的死者，紧贴过梁，个子最小
+    const n = 7, span = innerA * 1.5;
+    for (let i = 0; i < n; i++) {
+      const f = makeFigure(0.52 * k, mats.stoneLight);
+      f.position.set(-span / 2 + span * (i / (n - 1)), lintelTop + 0.06, 0.2);
+      g.add(f);
+    }
+  }
+  return g;
+}
+
 // 一座门：过梁（lintel）+ 门楣（tympanum）+ 中柱（trumeau）+ 两扇门板 + 便门（wicket）
 //
 // 真教堂的大门远比门洞矮：门扇顶上横一道过梁，过梁以上的尖拱面是**实心的门楣浮雕**。
@@ -62,12 +154,21 @@ export function doorAssembly(op, mats, cfg = {}) {
   lintel.castShadow = true;
   grp.add(lintel);
 
-  // 中柱：门太宽时顶住过梁中点
+  // 中柱：门太宽时顶住过梁中点。中柱上立一尊像——高哥特中门的标配
+  // （亚眠是"美丽的上帝"，沙特尔王门是国王像柱），像脚下有托座、头上有华盖。
   if (cfg.trumeau) {
     const tr = new THREE.Mesh(new THREE.BoxGeometry(trW, doorH + 0.05, 0.42), mats.stoneLight);
     tr.position.set(op.cx, (doorH + 0.05) / 2, -0.06);
     tr.castShadow = true;
     grp.add(tr);
+    const st = statueNiche(Math.min(2.1, doorH * 0.46), mats.stone, { halo: true });   // 中柱上是基督，有头光
+    st.position.set(op.cx, doorH * 0.24, 0.19);
+    grp.add(st);
+  }
+
+  // 门楣浮雕
+  if (cfg.innerA) {
+    grp.add(tympanumRelief(cfg.innerA, lintelTop, cfg.innerApex ?? (lintelTop + 4.5), mats, !!cfg.trumeau));
   }
 
   // 门板要比洞口"宽出一点"、铰链也往石头里挪一点：真门是压在门框上的（有裁口），
@@ -195,9 +296,25 @@ export function portal(a, springY, mats, layers = 3, sillBack = layers * 0.8 + 0
   }
   // 门：过梁 + 门楣 + （中门另加）中柱 + 两扇门板
   const op = doorOp || { cx: 0, a: a - (layers - 1) * 0.55, y0: 0, springY: springY - (layers - 1) * 0.7, k: 1.3 };
-  const door = doorAssembly(op, mats, doorCfg);
+  const innerA = a - (layers - 1) * 0.55, innerSpring = springY - (layers - 1) * 0.7;
+  const door = doorAssembly(op, mats, {
+    ...doorCfg, innerA, innerApex: innerSpring + archApex(innerA, 1.3),
+  });
   door.position.set(0, 0, doorZ);
   grp.add(door);
+  // 门龛侧壁的柱像（jamb / column figures）：哥特门龛最标志性的一件事，
+  // 一层门龛立一对，越往里越小。最内一圈不放——那儿要留给门扇转进来。
+  for (let i = 0; i < layers - 1; i++) {
+    const ai = a - i * 0.55;
+    const h = Math.min(2.5, springY * 0.42) * (1 - i * 0.12);
+    for (const sx of [1, -1]) {
+      const st = statueNiche(h, mats.stoneLight);   // 门龛柱像是先知与列王，不带头光
+      st.position.set(sx * (ai - 0.3), springY * 0.16, -i * 0.8 + 0.3);
+      st.rotation.y = -sx * 0.5;                   // 略朝门洞里侧转
+      grp.add(st);
+    }
+  }
+
   // 门上山花
   const gable = new THREE.Mesh(gableGeometry(a + 0.8, springY + archApex(a, 1.3) + 0.8, springY + archApex(a, 1.3) + 4.2, 0.6), mats.stoneLight);
   gable.position.z = 0.2;
