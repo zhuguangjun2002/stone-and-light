@@ -3,8 +3,9 @@
 // 双塔在结构上压稳立面，在城市里是远眺的地标。
 
 import * as THREE from '../lib/three.module.js';
-import { wallWithOpenings, openingGlassGeometry, openingShape, gableGeometry, makePinnacle, archApex } from './gothic.js';
+import { wallWithOpenings, openingGlassGeometry, openingShape, gableGeometry, makePinnacle, archApex, pointedArchPoints } from './gothic.js';
 import { makeStatue } from './figure.js';
+import { normalTexture, mulberry32 } from './materials.js';
 
 // 玫瑰窗组件：石环 + 放射辐条 + 玻璃盘
 export function roseAssembly(r, mats, roseMat) {
@@ -50,6 +51,69 @@ function statueNiche(h, mat, opts = {}) {
   return g;
 }
 
+// 门楣的细部刻痕：不做成几何，画一张**高度图**转法线贴图贴上去。
+// 浅浮雕本来就是"石面被凿掉多少"的高度场，法线贴图正是它的等价物——面数一点不涨，
+// 掠光下衣褶、券圈小像、凿痕全出得来。画的内容按真门楣的层次：
+// 沿拱边一道**边饰带**、曼多拉背后的**放射光线**、下缘一排**小连拱龛**、满面的凿痕。
+function tympanumMaterial(op, y0, y1, mats, innerA) {
+  const nm = normalTexture(768, 768, (ctx, W, H) => {
+    const a = op.a;
+    const px = (x) => (x + a) / (2 * a) * W;         // 世界坐标 → 画布（画布上边 = 拱顶）
+    const py = (y) => H - (y - y0) / (y1 - y0) * H;
+    const rnd = mulberry32(97);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, W, H);
+    // 沿拱边的边饰带
+    const pts = pointedArchPoints(a, op.springY, op.k ?? 1.3, 40);
+    ctx.beginPath();
+    ctx.moveTo(px(-a), py(y0));
+    ctx.lineTo(px(-a), py(op.springY));
+    for (const p of pts) ctx.lineTo(px(p.x), py(p.y));
+    ctx.lineTo(px(a), py(y0));
+    ctx.strokeStyle = '#c8c8c8'; ctx.lineWidth = W * 0.028; ctx.stroke();
+    ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = W * 0.008; ctx.stroke();
+    // 曼多拉背后的放射光线
+    const cx = px(0), cy = py(y0 + (y1 - y0) * 0.42);
+    for (let i = 0; i < 40; i++) {
+      const t = (i / 40) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(t) * W * 0.1, cy + Math.sin(t) * W * 0.1);
+      ctx.lineTo(cx + Math.cos(t) * W * 0.33, cy + Math.sin(t) * W * 0.33);
+      ctx.strokeStyle = i % 2 ? '#5e5e5e' : '#2c2c2c';
+      ctx.lineWidth = W * 0.005;
+      ctx.stroke();
+    }
+    // 下缘一排小连拱龛：位置与那排小像**一一对应**，一尊像站一个龛里
+    const n = 7, span = (innerA ?? a * 0.63) * 1.5, step = span / (n - 1);
+    const halfW = step * 0.44 / (2 * a) * W, ht = H * 0.105;
+    for (let i = 0; i < n; i++) {
+      const x = px(-span / 2 + step * i), yb = py(y0) - H * 0.01;
+      ctx.beginPath();
+      ctx.moveTo(x - halfW, yb);
+      ctx.lineTo(x - halfW, yb - ht * 0.6);
+      ctx.quadraticCurveTo(x, yb - ht * 1.2, x + halfW, yb - ht * 0.6);
+      ctx.lineTo(x + halfW, yb);
+      ctx.closePath();
+      ctx.fillStyle = '#101010'; ctx.fill();
+      ctx.strokeStyle = '#c0c0c0'; ctx.lineWidth = W * 0.008; ctx.stroke();
+    }
+    // 满面凿痕
+    for (let i = 0; i < 5000; i++) {
+      const x = rnd() * W, y = rnd() * H, l = 2 + rnd() * 7, a2 = rnd() * Math.PI;
+      ctx.strokeStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.12)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a2) * l, y + Math.sin(a2) * l); ctx.stroke();
+    }
+  }, 2.6);
+  if (!nm) return mats.stoneLight;
+  nm.repeat.set(1 / (2 * op.a), 1 / (y1 - y0));      // 挤出体端面的 UV 就是形状坐标（米）
+  nm.offset.set(0.5, -y0 / (y1 - y0));
+  const m = mats.stoneLight.clone();
+  m.normalMap = nm;
+  m.normalScale = new THREE.Vector2(0.9, 0.9);
+  return m;
+}
+
 // 门楣浮雕：《最后的审判》的标准构图——
 // 正中基督坐在杏仁形的**曼多拉（mandorla）**里，两侧天使托举；最下面紧贴过梁的一带
 // 最小，是复活的死者与"称量灵魂"。这里按浮雕做：把轮廓挤出几厘米贴在门楣板上。
@@ -66,13 +130,13 @@ function tympanumRelief(innerA, lintelTop, apexY, mats, rich) {
   mand.position.set(0, midY, 0.16);
   mand.castShadow = true;
   g.add(mand);
-  const christ = makeStatue(2.05 * k, mats.stoneLight, { halo: true, seed: 11 });
+  const christ = makeStatue(2.05 * k, mats.stoneLight, { halo: true, seed: 11, width: 1.3 });
   christ.scale.y = 0.82;                           // 坐姿：身子压短
   christ.position.set(0, midY - hh * 0.72, 0.26);
   g.add(christ);
   if (rich) {
     for (const sx of [1, -1]) {                    // 托举曼多拉的天使
-      const a = makeStatue(1.15 * k, mats.stoneLight, { seed: sx > 0 ? 21 : 22 });
+      const a = makeStatue(1.15 * k, mats.stoneLight, { seed: sx > 0 ? 21 : 22, width: 1.35 });
       a.position.set(sx * (hw + 0.62 * k), midY - hh * 0.55, 0.2);
       a.rotation.y = -sx * 0.35;
       g.add(a);
@@ -80,8 +144,8 @@ function tympanumRelief(innerA, lintelTop, apexY, mats, rich) {
     // 最下一带：复活的死者，紧贴过梁，个子最小
     const n = 7, span = innerA * 1.5;
     for (let i = 0; i < n; i++) {
-      const f = makeStatue(0.52 * k, mats.stoneLight, { seed: 40 + i, arms: false, rings: 12, seg: 10 });
-      f.position.set(-span / 2 + span * (i / (n - 1)), lintelTop + 0.06, 0.2);
+      const f = makeStatue(0.74 * k, mats.stoneLight, { seed: 40 + i, arms: false, width: 1.9, rings: 12, seg: 10 });
+      f.position.set(-span / 2 + span * (i / (n - 1)), lintelTop + 0.05, 0.21);
       g.add(f);
     }
   }
@@ -112,9 +176,10 @@ export function doorAssembly(op, mats, cfg = {}) {
   const lintelTop = doorH + lintelH;
 
   // 门楣：过梁以上整片填实（真教堂这里是《最后的审判》一类的浮雕）
+  const tympApex = op.springY + archApex(op.a, op.k ?? 1.3);
   const tymp = new THREE.Mesh(
     new THREE.ExtrudeGeometry(openingShape({ ...op, y0: lintelTop }), { depth: 0.3, bevelEnabled: false }),
-    mats.stoneLight);
+    tympanumMaterial(op, lintelTop, tympApex, mats, cfg.innerA));
   tymp.position.z = -0.15;
   tymp.castShadow = tymp.receiveShadow = true;
   grp.add(tymp);

@@ -57,6 +57,43 @@ function stoneTexture(base, joint, seed = 7) {
 }
 
 // 棋盘地砖：一张贴图 = FLOOR_TILES × FLOOR_TILES 格，边长 FLOOR_TILE 米（由 worldFloorUV 按世界坐标铺开）
+// 高度图 → 法线贴图。
+// 浅浮雕（bas-relief）本质就是一张高度图：石面被凿掉多少，光就怎么打上去。
+// 所以细部不必做成几何——在 canvas 上画一张灰度高度图，用 Sobel 求梯度转成法线，
+// 面数一点不涨，掠光下衣褶、刻痕都出得来。
+// 注意两处符号：canvas 的 y 朝下、CanvasTexture 默认 flipY，绿通道要跟着翻；
+// strength 是"凿多深"，太大石头会看着像铁皮。
+export function normalTexture(w, h, drawHeight, strength = 3.0) {
+  if (!hasDOM) return null;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+  drawHeight(ctx, w, h);
+  const src = ctx.getImageData(0, 0, w, h).data;
+  const out = ctx.createImageData(w, h);
+  const at = (x, y) => src[((y < 0 ? 0 : y >= h ? h - 1 : y) * w + (x < 0 ? 0 : x >= w ? w - 1 : x)) * 4] / 255;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const len = Math.hypot(dx, dy, 1);
+      const i = (y * w + x) * 4;
+      out.data[i] = (-dx / len * 0.5 + 0.5) * 255;
+      out.data[i + 1] = (dy / len * 0.5 + 0.5) * 255;
+      out.data[i + 2] = (1 / len * 0.5 + 0.5) * 255;
+      out.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;             // 法线贴图是数据，不是颜色，别做 sRGB 转换
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 16;
+  return tex;
+}
+
 export const FLOOR_TILES = 8;
 export const FLOOR_TILE = 0.6;
 

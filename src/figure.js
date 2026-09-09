@@ -37,6 +37,9 @@ function lerpProfile(t) {
 export function figureBody(h, seed = 1, opts = {}) {
   const rnd = mulberry32(seed);
   const RINGS = opts.rings ?? 26, SEG = opts.seg ?? 14;
+  // 宽度系数：7:1 是等身柱像的比例；门楣上那种半米高的小像照这个比例做就成了钉子，
+  // 真浮雕里的小像也确实更敦实——按尺寸给它加宽。
+  const wide = opts.width ?? 1;
   const folds = 5 + Math.floor(rnd() * 4);          // 褶子道数
   const foldD = 0.085 + rnd() * 0.06;               // 褶子深浅（身子收细了，褶要更深才看得见）
   const phase = rnd() * Math.PI * 2;
@@ -45,7 +48,7 @@ export function figureBody(h, seed = 1, opts = {}) {
   for (let i = 0; i <= RINGS; i++) {
     const t = i / RINGS;
     const y = t * h * 0.94;
-    const base = lerpProfile(t) * h;
+    const base = lerpProfile(t) * h * wide;
     const taper = Math.max(0, 1 - Math.max(0, (t - 0.72) / 0.2));   // 褶子到肩收干净
     for (let j = 0; j < SEG; j++) {
       const a = (j / SEG) * Math.PI * 2;
@@ -77,10 +80,11 @@ export function makeStatue(h, mat, opts = {}) {
   const g = new THREE.Group();
   const body = new THREE.Mesh(figureBody(h, seed, opts), mat);
   g.add(body);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.022, h * 0.032, h * 0.05, 8), mat);
+  const wide = opts.width ?? 1;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.022 * wide, h * 0.032 * wide, h * 0.05, 8), mat);
   neck.position.y = h * 0.955;
   g.add(neck);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(h * 0.048, 12, 10), mat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(h * 0.048 * (0.55 + 0.45 * wide), 12, 10), mat);
   head.position.y = h * 1.02;
   head.scale.set(1, 1.12, 0.92);
   g.add(head);
