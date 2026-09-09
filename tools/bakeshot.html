@@ -1,0 +1,75 @@
+<!doctype html><meta charset="utf-8"><title>烘焙对照取景页</title>
+<style>html,body{margin:0;overflow:hidden;background:#000}</style>
+<script type="importmap">
+  { "imports": { "three": "../lib/three.module.js" } }
+</script>
+<script type="module">
+// 烘焙前后的定点对照：与 main.js 同一套光照、雾、地面，相机由脚本指定；
+// __bake() 就地跑一遍顶点色烘焙（tools/bake.js），再拍同一机位即可 A/B 对照。
+import * as THREE from '../lib/three.module.js';
+import { buildCathedral } from '../src/cathedral.js';
+import { bakeVertexLight } from './bake.js';
+import { P } from '../src/params.js';
+
+const q = new URLSearchParams(location.search);
+if (q.get('glazing')) P.glazing = q.get('glazing');            // 建之前定镶玻方案
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#cbd6e6');
+scene.fog = new THREE.FogExp2('#d8d4c6', 0.0016);
+const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85);
+const sun = new THREE.DirectionalLight('#fff1da', 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
+sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
+sun.shadow.camera.near = 20; sun.shadow.camera.far = 350; sun.shadow.bias = -0.0006;
+scene.add(hemi, sun, sun.target);
+const pts = [];
+for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
+  const p = new THREE.PointLight('#ffd9a0', 220, 70, 2); p.position.set(x, y, z);
+  scene.add(p); pts.push(p);
+}
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
+  new THREE.MeshStandardMaterial({ color: '#89906f' }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true;
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+  new THREE.MeshStandardMaterial({ color: '#9b968b' }));
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20); plaza.receiveShadow = true;
+scene.add(ground, plaza);
+scene.add(buildCathedral().root);
+scene.updateMatrixWorld(true);
+
+function setSun(t) {
+  const s = Math.sin(Math.PI * t), az = Math.PI * t, el = (7 + 56 * s) * Math.PI / 180, R = 170;
+  sun.position.set(R * Math.cos(el) * Math.sin(az), R * Math.sin(el), -R * Math.cos(el) * Math.cos(az));
+  sun.intensity = 1.0 + 1.5 * s; hemi.intensity = 0.3 + 0.6 * s;
+}
+
+window.__bake = (cfg = {}) => {                                 // 烘焙一遍，返回统计
+  const box = cfg.box ? new THREE.Box3(
+    new THREE.Vector3(...cfg.box.slice(0, 3)), new THREE.Vector3(...cfg.box.slice(3))) : null;
+  const it = bakeVertexLight(scene, { rays: cfg.rays ?? 32, box, bounce: cfg.bounce, floor: cfg.floor });
+  let r = it.next(), last = 0;
+  while (!r.done) { last = r.value.done; r = it.next(); }
+  // 烘焙接管了"室内间接光"，就该把原来那三盏假点光收小，否则会把烘出来的层次冲掉
+  for (const p of pts) p.intensity = cfg.points ?? 110;
+  return { ...r.value, last };
+};
+window.__shot = (cfg) => {
+  renderer.setSize(cfg.w, cfg.h);
+  const cam = new THREE.PerspectiveCamera(cfg.fov ?? 55, cfg.w / cfg.h, 0.4, 2000);
+  cam.position.set(...cfg.pos); cam.lookAt(...cfg.tgt);
+  setSun(cfg.sun ?? 0.42);
+  renderer.render(scene, cam);
+  return renderer.domElement.toDataURL('image/png');
+};
+window.__ready = true;
+</script>

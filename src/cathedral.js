@@ -18,7 +18,7 @@ export function buildCathedral() {
   const VAULT_APEX = P.vaultSpring + archApex(P.naveHW, P.vaultK); // 默认参数下 ≈28.4
   const AISLE_APEX = P.aisleVaultSpring + archApex(P.aisleW / 2, 1.0);
   const mats = makeMaterials();
-  const glassMats = makeGlassMaterials();
+  const glassMats = makeGlassMaterials(P.glazing);
   const root = new THREE.Group();
   const labels = [];
   const vaultMats = { web: new THREE.MeshStandardMaterial({ color: '#ded5c2', roughness: 0.95, side: THREE.DoubleSide }), rib: mats.stoneDark };

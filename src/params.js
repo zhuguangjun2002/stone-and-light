@@ -47,6 +47,10 @@ export const P = {
 
   // 交叉部尖塔（flèche）
   flecheTop: 62,
+
+  // 镶玻方案：'chartres'（12–13 世纪叙事窗，深蓝深红、室内暗）
+  //          'late'（14–16 世纪白地银黄，铅条疏、室内亮）见 glass.js 的 GLAZING
+  glazing: 'chartres',
 };
 
 // 派生量。设计面板改动基础参数后需重算一次再重建。
