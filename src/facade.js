@@ -70,14 +70,20 @@ export function doorAssembly(op, mats, cfg = {}) {
     grp.add(tr);
   }
 
-  const leafW = doorA - trW / 2 - 0.03;
+  // 门板要比洞口"宽出一点"、铰链也往石头里挪一点：真门是压在门框上的（有裁口），
+  // 门板正好卡进洞口的话，四边会漏出一条光缝——从暗的室内往亮处看尤其明显。
+  const REB = 0.03;                                // 压过门框的量
+  const leafW = doorA + REB - trW / 2;
   const wickW = Math.min(0.95, leafW * 0.5), wickH = Math.min(2.05, doorH * 0.46);
   const wickCX = leafW * 0.04, wickY0 = 0.12;    // 便门有道要跨过去的门槛
   for (const side of [-1, 1]) {                    // -1 左扇，+1 右扇
     const hasWick = cfg.wicket && side < 0;        // 便门只开在左扇上
     const pivot = new THREE.Group();               // 枢轴在门边侧的门框上
-    pivot.position.set(op.cx + side * doorA, 0, 0);
-    pivot.userData.door = { side, max: cfg.max ?? 1.75 };   // 开到 ~100°
+    pivot.position.set(op.cx + side * (doorA + REB), 0, 0);
+    // 只开到 80°：门轴就在门洞边上，超过 90° 门板会往门框石头里钻（转到 100° 时
+    // 门板尖端已经进墙 0.29 m）；而且正好 90° 时门板对着你是"刀刃朝前"，12 cm 厚
+    // 什么也看不见——80° 留一点角度，门板能吃到光，也看得出它开着。
+    pivot.userData.door = { side, max: cfg.max ?? 1.4 };
     grp.add(pivot);
 
     // 门板：有便门的那扇要**真的挖个洞**，不然把便门推开、后面还是整块门板
@@ -131,7 +137,7 @@ export function doorAssembly(op, mats, cfg = {}) {
       }
       const wp = new THREE.Group();                // 便门自己的枢轴，可以单独开
       wp.position.set(wickCX - wickW / 2, wickY0 - doorH / 2, 0);
-      wp.userData.door = { side: -1, max: cfg.wicketMax ?? 1.6, wicket: true };
+      wp.userData.door = { side: -1, max: cfg.wicketMax ?? 1.45, wicket: true };   // 同理，别超过 90°
       leaf.add(wp);
       const wleaf = new THREE.Mesh(new THREE.BoxGeometry(wickW - 0.02, wickH - 0.02, T * 0.8), mats.door);
       wleaf.position.set(wickW / 2, wickH / 2, 0);
