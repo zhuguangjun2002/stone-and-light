@@ -328,7 +328,9 @@ function buildTransept(root, mats, glassMats, labels) {
     rose.position.set(sx * (P.transeptEnd + 1.5), 21.5, 0);
     root.add(rose);
     const pt = portal(2.2, 6.5, mats, 2, 1.3, -1.47, 5.2,
-      { cx: 0, a: 2.4, y0: 0, springY: 6.5, k: 1.3 });   // 门扇按端墙洞口形状落在内皮；门槛不压到耳堂臂铺地
+      { cx: 0, a: 2.4, y0: 0, springY: 6.5, k: 1.3 },    // 门槛不压到耳堂臂铺地
+      // 南耳堂门是真教堂的日常入口（南面朝阳背风），所以这扇也开便门
+      { id: sx > 0 ? 'transept-south' : 'transept-north', doorA: 1.65, doorH: 3.9, wicket: sx > 0 });
     pt.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
     pt.position.set(sx * (P.transeptEnd + 1.4), 0, 0);
     root.add(pt);

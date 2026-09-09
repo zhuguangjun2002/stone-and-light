@@ -5,6 +5,7 @@ import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { buildCathedral } from './cathedral.js';
 import { applyBakedColors, bakeableMeshes } from './bake.js';
+import { collectDoors, setDoorState, nextState, updateDoors, STATE_NAMES } from './doors.js';
 import { canvasTexture } from './materials.js';
 import { P, recomputeDerived } from './params.js';
 import { archApex } from './gothic.js';
@@ -71,11 +72,12 @@ function setSunTime(t) {
     R * Math.sin(elev),
     -R * Math.cos(elev) * Math.cos(az));
   sun.color.lerpColors(_c1.set('#ff9a4f'), _c2.set('#fff3dc'), s);
-  sun.intensity = 1.0 + 1.5 * s;
-  hemi.intensity = 0.3 + 0.6 * s;
-  const top = _c1.set('#3a4a78').lerp(_c2.set('#4f7fc0'), s).getStyle();
-  const mid = _c2.set('#c98d6b').lerp(_c3.set('#a8c0dc'), s).getStyle();
-  const bot = _c3.set('#f0bd90').lerp(new THREE.Color('#e9e3d3'), s).getStyle();
+  sun.intensity = (1.0 + 1.5 * s) * WEATHER[weather].sun;
+  hemi.intensity = (0.3 + 0.6 * s) * WEATHER[weather].hemi;
+  const w = WEATHER[weather], grey = new THREE.Color(w.sky);
+  const top = _c1.set('#3a4a78').lerp(_c2.set('#4f7fc0'), s).lerp(grey, w.mix).getStyle();
+  const mid = _c2.set('#c98d6b').lerp(_c3.set('#a8c0dc'), s).lerp(grey, w.mix).getStyle();
+  const bot = _c3.set('#f0bd90').lerp(new THREE.Color('#e9e3d3'), s).lerp(grey, w.mix).getStyle();
   const old = scene.background;
   scene.background = canvasTexture(16, 512, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h);
@@ -86,6 +88,7 @@ function setSunTime(t) {
   });
   old?.dispose?.();
   scene.fog.color.set(bot);
+  scene.fog.density = w.fog;
   const hh = Math.floor(7 + t * 12), mm = Math.round(((7 + t * 12) % 1) * 60);
   const lab = document.getElementById('sunLabel');
   if (lab) lab.textContent = `${hh}:${String(mm).padStart(2, '0')}`;
@@ -270,6 +273,9 @@ function mountCathedral() {
   });
   applySection(SECTIONS[sectionIdx].planes);
   computeBuildOrder();
+  doors = collectDoors(root);
+  setAllDoors(WEATHER[weather].doors, true);
+  buildDoorPlan();
   startBake();
 }
 
@@ -402,6 +408,130 @@ function applySection(planes) {
     m.clippingPlanes = planes.length ? planes : null;
     m.needsUpdate = true;
   }
+}
+
+// ---------- 门 ----------
+// 真教堂的门平时是关的：巨门要几个人合力才推得开，日常从门板上挖的便门进出；
+// 雨雪天更是关着。所以"晴天"的默认状态是中门与南耳堂门开便门，其余关死。
+let doors = [];
+function refreshDoorUI() {
+  const info = document.getElementById('doorInfo');
+  if (info) {
+    const open = doors.filter((d) => d.state !== 'closed');
+    info.textContent = open.length ? `开着：${open.map((d) => `${d.name}（${STATE_NAMES[d.state]}）`).join('、')}` : '五座门全关';
+  }
+  for (const d of doors) {
+    const el = document.getElementById(`dot-${d.id}`);
+    if (el) el.setAttribute('fill', d.state === 'open' ? '#ffd98f' : d.state === 'wicket' ? '#c9a24f' : 'rgba(20,16,12,.9)');
+  }
+}
+function cycleDoor(d) {
+  setDoorState(d, nextState(d));
+  toast(`${d.name}：${STATE_NAMES[d.state]}`);
+  refreshDoorUI();
+}
+function setAllDoors(state, instant = false) {
+  for (const d of doors) setDoorState(d, state === 'wicket' && !d.hasWicket ? 'closed' : state, instant);
+  refreshDoorUI();
+}
+// 面板里的小平面图：十字平面 + 半圆后殿，五个点就是五座门，点一下换一档。
+// 图是横放的（后殿在左、西立面在右），竖着放的话在面板里会高得离谱。
+function buildDoorPlan() {
+  const host = document.getElementById('doorPlan');
+  if (!host) return;
+  const X0 = -27, Z0 = -43;                       // 世界 → 图：x 竖向（北在上），z 横向
+  const px = (z) => (z - Z0).toFixed(1), py = (x) => (x - X0).toFixed(1);
+  const r = (x0, z0, x1, z1) =>
+    `<rect class="wall" x="${px(z0)}" y="${py(x0)}" width="${(z1 - z0).toFixed(1)}" height="${(x1 - x0).toFixed(1)}"/>`;
+  host.innerHTML = `<svg viewBox="0 0 94 54">
+    <path class="wall" d="M ${px(-27)} ${py(-14.2)} A 14.2 14.2 0 0 0 ${px(-27)} ${py(14.2)}"/>
+    ${r(-14.2, -27, 14.2, 48)}${r(-25.5, -7.8, 25.5, 7.8)}
+    <text class="lab" x="2" y="6">北</text><text class="lab" x="86" y="52">西</text>
+    <g id="doorDots"></g></svg>`;
+  const g = host.querySelector('#doorDots');
+  for (const d of doors) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('class', 'dot'); c.setAttribute('id', `dot-${d.id}`);
+    c.setAttribute('cx', px(d.z)); c.setAttribute('cy', py(d.x)); c.setAttribute('r', '2.6');
+    c.addEventListener('click', () => cycleDoor(d));
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    t.textContent = d.name;
+    c.appendChild(t);
+    g.appendChild(c);
+  }
+  refreshDoorUI();
+}
+
+// ---------- 天气 ----------
+// 门与天气是连着的：雨雪天全关。开着门的时候斜雨真的会灌进去——
+// tools/check-rain.mjs 加 --doors=open 就能算出"今天从大门进了多少升水"。
+const WEATHER = {
+  clear: { name: '晴', sun: 1, hemi: 1, sky: '#8fa2b8', mix: 0, fog: 0.0016, doors: 'wicket' },
+  rain: { name: '雨', sun: 0.32, hemi: 0.85, sky: '#6b7480', mix: 0.75, fog: 0.006, doors: 'closed' },
+  snow: { name: '雪', sun: 0.45, hemi: 1.05, sky: '#9aa3ad', mix: 0.8, fog: 0.0075, doors: 'closed' },
+};
+let weather = 'clear', precip = null;
+function makePrecip() {
+  const N = 2600;
+  const pos = new Float32Array(N * 6);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const rain = new THREE.LineSegments(geo,
+    new THREE.LineBasicMaterial({ color: '#cfe0f0', transparent: true, opacity: 0.55 }));
+  const sgeo = new THREE.BufferGeometry();
+  sgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  const snow = new THREE.Points(sgeo,
+    new THREE.PointsMaterial({ color: '#ffffff', size: 0.22, transparent: true, opacity: 0.85, depthWrite: false }));
+  rain.frustumCulled = snow.frustumCulled = false;
+  rain.visible = snow.visible = false;
+  scene.add(rain, snow);
+  const p = new Float32Array(N * 3);
+  const R = 70, HI = 40;
+  for (let i = 0; i < N; i++) {
+    p[i * 3] = (Math.random() - 0.5) * 2 * R;
+    p[i * 3 + 1] = Math.random() * HI;
+    p[i * 3 + 2] = (Math.random() - 0.5) * 2 * R;
+  }
+  return { N, R, HI, p, rain, snow, pos, spos: sgeo.attributes.position.array };
+}
+function updatePrecip(dt) {
+  if (!precip) return;
+  const on = weather !== 'clear' && !insideCathedral(camera.position);   // 屋顶底下当然看不见雨
+  precip.rain.visible = on && weather === 'rain';
+  precip.snow.visible = on && weather === 'snow';
+  if (!on) return;
+  const { N, R, HI, p } = precip;
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+  const fall = weather === 'rain' ? 26 : 1.6, wind = weather === 'rain' ? 5 : 1.2;
+  const t = performance.now() / 1000;
+  for (let i = 0; i < N; i++) {
+    let x = p[i * 3], y = p[i * 3 + 1], z = p[i * 3 + 2];
+    y -= fall * dt;
+    x += wind * dt + (weather === 'snow' ? Math.sin(t + i) * 0.4 * dt : 0);
+    if (y < 0) { y += HI; x = (Math.random() - 0.5) * 2 * R; z = (Math.random() - 0.5) * 2 * R; }
+    if (x > R) x -= 2 * R; else if (x < -R) x += 2 * R;
+    if (z > R) z -= 2 * R; else if (z < -R) z += 2 * R;
+    p[i * 3] = x; p[i * 3 + 1] = y; p[i * 3 + 2] = z;
+    const wx = cx + x, wy = cy - HI / 2 + y, wz = cz + z;
+    if (weather === 'rain') {
+      const o = i * 6;
+      precip.pos[o] = wx; precip.pos[o + 1] = wy; precip.pos[o + 2] = wz;
+      precip.pos[o + 3] = wx - wind * 0.05; precip.pos[o + 4] = wy + 0.9; precip.pos[o + 5] = wz;
+    } else {
+      precip.spos[i * 3] = wx; precip.spos[i * 3 + 1] = wy; precip.spos[i * 3 + 2] = wz;
+    }
+  }
+  if (weather === 'rain') precip.rain.geometry.attributes.position.needsUpdate = true;
+  else precip.snow.geometry.attributes.position.needsUpdate = true;
+}
+function setWeather(w) {
+  weather = WEATHER[w] ? w : 'clear';
+  const sel = document.getElementById('pWeather');
+  if (sel) sel.value = weather;
+  if (!precip) precip = makePrecip();
+  setSunTime(currentSunT);                        // 重算天色、雾、日照强度
+  setAllDoors(WEATHER[weather].doors);
+  toast(`天气：${WEATHER[weather].name}${weather === 'clear' ? '' : ' · 门都关上了'}`);
 }
 
 // ---------- 工地装备与声音 ----------
@@ -726,6 +856,7 @@ function wirePanel() {
     });
   }
   document.getElementById('pGlazing').addEventListener('change', (e) => setGlazing(e.target.value));
+  document.getElementById('pWeather').addEventListener('change', (e) => setWeather(e.target.value));
   document.getElementById('sunT').addEventListener('input', (e) => setSunTime(Number(e.target.value)));
   document.getElementById('playBtn').addEventListener('click', () => {
     build.playing = !build.playing;
@@ -767,6 +898,12 @@ function doAction(name) {
       break;
     case 'mute': toast(audio.toggleMute() ? '静音' : '声音开'); break;
     case 'help': document.getElementById('help').classList.toggle('hidden'); break;
+    case 'doors': {
+      const anyOpen = doors.some((d) => d.state !== 'closed');
+      setAllDoors(anyOpen ? 'closed' : 'open');
+      toast(anyOpen ? '五座门全关' : '五座门全开');
+      break;
+    }
     case 'uiSmaller':
     case 'uiBigger': {
       const eff = applyUIBoost(uiBoost + (name === 'uiBigger' ? 0.12 : -0.12));
@@ -780,7 +917,7 @@ function doAction(name) {
 const CODE_ACTIONS = {
   KeyT: 'tour', KeyB: 'build', KeyF: 'walk', KeyP: 'panel',
   KeyC: 'section', KeyL: 'labels', KeyG: 'bell', KeyO: 'organ', KeyM: 'mute', KeyH: 'help',
-  Minus: 'uiSmaller', Equal: 'uiBigger',
+  KeyK: 'doors', Minus: 'uiSmaller', Equal: 'uiBigger',
 };
 addEventListener('keydown', (e) => {
   audio.ensure();
@@ -849,6 +986,8 @@ function animate() {
   if (tour.active) updateTour(dt);
   else if (walk.active) updateWalk(dt);
   else controls.update();
+  updateDoors(doors, dt);
+  updatePrecip(dt);
   audio.setInside(insideCathedral(camera.position));
   updateLabels();
   renderer.render(scene, camera);
@@ -867,7 +1006,9 @@ wirePanel();
 wireCtrlbar();
 updatePanelReadout();
 if (presetQ) showPresetCard(presetQ);
+if (q.get('weather')) setWeather(q.get('weather'));
 setSunTime(q.get('time') != null ? Number(q.get('time')) : 0.42);
+if (q.get('doors')) setAllDoors(q.get('doors'), true);
 document.getElementById('sunT').value = q.get('time') ?? 0.42;
 if (q.get('section')) {
   sectionIdx = (+q.get('section')) % SECTIONS.length;

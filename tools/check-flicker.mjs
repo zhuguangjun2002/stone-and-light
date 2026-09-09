@@ -64,6 +64,7 @@ page.on('console', (m) => { if (m.type() === 'error') console.error('PAGE:', m.t
 page.on('pageerror', (e) => console.error('PAGE ERR:', e.message));
 await page.goto(`http://localhost:${PORT}/tools/flicker.html`, { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction('window.__ready === true', { timeout: 180000 });
+if (arg('doorstate')) await page.evaluate((st) => window.__doors(st), arg('doorstate'));
 
 const probeAt = arg('probe') ? arg('probe').split(',').map(Number) : null;
 let grand = 0;

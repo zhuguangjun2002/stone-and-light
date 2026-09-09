@@ -39,8 +39,8 @@ export function doorAssembly(op, mats, cfg = {}) {
   const grp = new THREE.Group();
   const a = op.a;
   // 门扇要装在**最内一圈**门龛的洞口里（门龛层层内收，门在最窄那一圈），不能按外圈
-  // 的洞口做——那样门比它要转进去的洞还宽，一开就撞门框。外圈到内圈之间的空当用
-  // 门颊（jamb）填实，这也正是真门龛的样子：一层层收进去，最后收到门那么宽。
+  // 的洞口做——那样门比它要转进去的洞还宽，一开就撞门框。外圈到内圈之间的门颊不用
+  // 另做：最内一圈门龛的墙体本身就是门颊（再补一块反而与它面对面共面，成片打架）。
   const doorA = cfg.doorA ?? a;
   const doorH = cfg.doorH ?? Math.min(4.6, op.springY * 0.62);
   const T = 0.12;                                  // 门板厚
@@ -55,17 +55,6 @@ export function doorAssembly(op, mats, cfg = {}) {
   tymp.position.z = -0.15;
   tymp.castShadow = tymp.receiveShadow = true;
   grp.add(tymp);
-
-  // 门颊：外圈洞口与门洞之间的两条侧壁
-  if (doorA < a - 0.01) {
-    for (const sx of [-1, 1]) {
-      const w = a - doorA;
-      const jamb = new THREE.Mesh(new THREE.BoxGeometry(w, lintelTop, 0.42), mats.stoneLight);
-      jamb.position.set(op.cx + sx * (doorA + w / 2), lintelTop / 2, -0.06);
-      jamb.castShadow = jamb.receiveShadow = true;
-      grp.add(jamb);
-    }
-  }
 
   // 过梁
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(a * 2 + 0.1, lintelH, 0.5), mats.stone);

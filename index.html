@@ -64,6 +64,12 @@
   #panel select { flex: 1; min-width: 0; background: rgba(0,0,0,.35); color: #efe7d6;
                   border: 1px solid rgba(239,231,214,.25); border-radius: 4px; padding: 3px 4px; font: inherit; }
   #panel .apex { margin: 8px 0 2px; color: rgba(239,231,214,.75); }
+  #doorPlan { margin: 4px 0 2px; }
+  #doorPlan svg { width: 100%; height: auto; display: block; }
+  #doorPlan .wall { fill: rgba(239,231,214,.1); stroke: rgba(239,231,214,.45); stroke-width: .6; }
+  #doorPlan .dot { cursor: pointer; stroke: #ffd98f; stroke-width: .9; }
+  #doorPlan .dot:hover { stroke: #fff; }
+  #doorPlan .lab { fill: rgba(239,231,214,.5); font-size: 3.4px; }
   #panel .warn { margin: 6px 0 2px; color: #ff9b8a; }
   #panel .warn.hidden { display: none; }
   #timeline {
@@ -177,7 +183,7 @@
   <b>拖动</b> 环视 &nbsp; <b>滚轮</b> 远近 &nbsp; <b>右键拖</b> 平移<br>
   <b>1–7</b> 视角书签：全景 / 西立面 / 中厅 / 拱顶 / 飞扶壁 / 后殿 / 管风琴<br>
   <b>T</b> 电影导览 &nbsp; <b>B</b> 建造过程 &nbsp; <b>F</b> 第一人称行走 &nbsp; <b>P</b> 设计与光面板<br>
-  <b>−</b>/<b>=</b> 界面缩放　<b>C</b> 剖面切换 &nbsp; <b>L</b> 结构标注 &nbsp; <b>G</b> 敲钟 &nbsp; <b>O</b> 管风琴 &nbsp; <b>M</b> 静音 &nbsp; <b>H</b> 帮助
+  <b>K</b> 开关门 &nbsp; <b>−</b>/<b>=</b> 界面缩放 &nbsp; <b>C</b> 剖面切换 &nbsp; <b>L</b> 结构标注 &nbsp; <b>G</b> 敲钟 &nbsp; <b>O</b> 管风琴 &nbsp; <b>M</b> 静音 &nbsp; <b>H</b> 帮助
 </div>
 <div id="toast"></div>
 <div id="presetCard" class="hidden">
@@ -205,6 +211,17 @@
     <input type="range" id="sunT" min="0" max="1" step="0.01" value="0.42">
     <span id="sunLabel">12:00</span>
   </div>
+  <h4>天气 <small>雨雪天门要关</small></h4>
+  <div class="row"><label>天气</label>
+    <select id="pWeather">
+      <option value="clear">晴</option>
+      <option value="rain">雨</option>
+      <option value="snow">雪</option>
+    </select>
+  </div>
+  <h4>门 <small>点平面图上的门</small></h4>
+  <div id="doorPlan"></div>
+  <p id="doorInfo" class="apex"></p>
   <h4>玻璃 <small>换一套镶玻</small></h4>
   <div class="row"><label>镶玻</label>
     <select id="pGlazing">
@@ -225,6 +242,7 @@
   <button data-act="tour">导览</button>
   <button data-act="build">建造</button>
   <button data-act="walk">行走</button>
+  <button data-act="doors">门</button>
   <button data-act="section">剖面</button>
   <button data-act="labels">标注</button>
   <button data-act="panel">设计</button>

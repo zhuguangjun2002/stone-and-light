@@ -6,6 +6,7 @@
 // 渲染进 RenderTarget 后把像素读回来，用几种"微扰"对比找出不稳定的像素。
 import * as THREE from '../lib/three.module.js';
 import { buildCathedral } from '../src/cathedral.js';
+import { collectDoors, setDoorState } from '../src/doors.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
@@ -41,6 +42,11 @@ scene.add(ground, plaza);
 
 const { root } = buildCathedral();
 scene.add(root);
+const doors = collectDoors(root);            // --doorstate=open/wicket 时把门打开再拍
+window.__doors = (st) => {
+  for (const d of doors) setDoorState(d, st === 'wicket' && !d.hasWicket ? 'closed' : st, true);
+  root.updateMatrixWorld(true);
+};
 scene.updateMatrixWorld(true);
 const mats = new Set();
 root.traverse((o) => { if (o.isMesh) for (const m of (Array.isArray(o.material) ? o.material : [o.material])) mats.add(m); });

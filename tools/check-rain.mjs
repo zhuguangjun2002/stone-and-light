@@ -1,6 +1,7 @@
 // 下雨天哪里漏：撒一场雨，把落进室内的雨滴聚成漏点，并回溯它是从哪个口子钻进来的。
 // 判据见 tools/rainscan.js——落点看不看得见天。
 // 用法：node tools/check-rain.mjs [--step=1] [--wind=0.35,0] [--top=20] [--json=文件]
+//   --doors=closed|wicket|open 门的状态（默认关）
 //   --step 是雨滴间距，越细越不容易漏掉窄缝（0.5 m 约 2 万滴、半分钟）
 //   --wind 是水平风速与下落速度之比：0,0 是垂直雨（只查水平的洞），
 //          0.35,0 相当于风从南边（+x）吹来，能查出侧面的口子。
@@ -8,6 +9,7 @@ import * as THREE from '../lib/three.module.js';
 import fs from 'node:fs';
 import { buildCathedral } from '../src/cathedral.js';
 import { scanLeaks } from './rainscan.js';
+import { collectDoors, setDoorState } from '../src/doors.js';
 
 const arg = (k, d) => {
   const a = process.argv.find((s) => s.startsWith(`--${k}=`));
@@ -20,7 +22,12 @@ const TOP = Number(arg('top', 20));
 const box = arg('box') ? arg('box').split(',').map(Number) : null;
 
 const scene = new THREE.Group();
-scene.add(buildCathedral().root);
+const root = buildCathedral().root;
+scene.add(root);
+// 门的状态：closed / wicket / open。开着门的时候斜雨会从门口灌进来，这一项能量出来
+const doorState = arg('doors', 'closed');
+const doors = collectDoors(root);
+for (const d of doors) setDoorState(d, doorState === 'wicket' && !d.hasWicket ? 'closed' : doorState, true);
 const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48), new THREE.MeshStandardMaterial());
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25;
 ground.userData.tag = '大地'; ground.userData.outdoor = true;
@@ -52,7 +59,7 @@ const f2 = (v) => +v.toFixed(2);
 const nLeak = [...res.leak].filter((v) => v === 1).length;
 const nSusp = [...res.leak].filter((v) => v === 2).length;
 const cell = step * step;
-console.log(`雨滴 ${res.nx * res.nz} 滴（${step} m 一滴，风 ${wind}），落进室内 ${nLeak} 滴`);
+console.log(`雨滴 ${res.nx * res.nz} 滴（${step} m 一滴，风 ${wind}，门 ${doorState}），落进室内 ${nLeak} 滴`);
 console.log(`= 有效进水面积 ${(nLeak * cell).toFixed(1)} m²；按 20 mm/h 的雨算，${(nLeak * cell * 20).toFixed(0)} 升/小时`);
 console.log(`另有 ${nSusp} 滴钻到了屋面下方（半开的夹层，不是封闭室内，但雨本不该进去）`);
 console.log(`漏点 ${res.clusters.length} 处，用时 ${((Date.now() - t0) / 1000).toFixed(1)} s\n`);
