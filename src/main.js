@@ -439,20 +439,25 @@ function setAllDoors(state, instant = false) {
 function buildDoorPlan() {
   const host = document.getElementById('doorPlan');
   if (!host) return;
-  const X0 = -27, Z0 = -43;                       // 世界 → 图：x 竖向（北在上），z 横向
+  // 世界 → 图：z 横向（后殿在左、西立面在右），x 竖向（北在上）。范围要盖到 z=59——
+  // 西面那两座侧门开在塔基里（z≈55.4），原来图只画到 51，它们直接被裁掉了。
+  const X0 = -27, Z0 = -43, W = 102, H = 54;
   const px = (z) => (z - Z0).toFixed(1), py = (x) => (x - X0).toFixed(1);
   const r = (x0, z0, x1, z1) =>
     `<rect class="wall" x="${px(z0)}" y="${py(x0)}" width="${(z1 - z0).toFixed(1)}" height="${(x1 - x0).toFixed(1)}"/>`;
-  host.innerHTML = `<svg viewBox="0 0 94 54">
-    <path class="wall" d="M ${px(-27)} ${py(-14.2)} A 14.2 14.2 0 0 0 ${px(-27)} ${py(14.2)}"/>
-    ${r(-14.2, -27, 14.2, 48)}${r(-25.5, -7.8, 25.5, 7.8)}
-    <text class="lab" x="2" y="6">北</text><text class="lab" x="86" y="52">西</text>
+  const tw = P.towerW / 2, txc = P.naveHW + P.arcadeT + P.towerW / 2 - 0.4, tz = P.naveZ1 + P.towerW / 2 - 0.5;
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}">
+    <path class="wall" d="M ${px(P.choirZ1)} ${py(-P.aisleOut - 1)} A ${P.aisleOut + 1} ${P.aisleOut + 1} 0 0 0 ${px(P.choirZ1)} ${py(P.aisleOut + 1)}"/>
+    ${r(-P.outerX, P.choirZ1, P.outerX, P.naveZ1)}
+    ${r(-(P.transeptEnd + 1.5), -P.naveHW - 1.8, P.transeptEnd + 1.5, P.naveHW + 1.8)}
+    ${r(txc - tw, tz - tw, txc + tw, tz + tw)}${r(-txc - tw, tz - tw, -txc + tw, tz + tw)}
+    <text class="lab" x="2" y="6">北</text><text class="lab" x="${W - 8}" y="${H - 2}">西</text>
     <g id="doorDots"></g></svg>`;
   const g = host.querySelector('#doorDots');
   for (const d of doors) {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     c.setAttribute('class', 'dot'); c.setAttribute('id', `dot-${d.id}`);
-    c.setAttribute('cx', px(d.z)); c.setAttribute('cy', py(d.x)); c.setAttribute('r', '2.6');
+    c.setAttribute('cx', px(d.z)); c.setAttribute('cy', py(d.x)); c.setAttribute('r', '2.8');
     c.addEventListener('click', () => cycleDoor(d));
     const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
     t.textContent = d.name;
@@ -678,7 +683,7 @@ function setTour(on, { keepTime = false } = {}) {
     controls.enabled = false;
     labelGroup.visible = false;
     document.getElementById('help').classList.add('hidden');
-    document.getElementById('panel').classList.add('hidden');
+    setPanel(false);
     document.getElementById('presetCard').classList.add('hidden');
     cine.classList.add('on');
     if (!RECORD) { audio.ensure(); audio.toll(2); }
@@ -768,6 +773,19 @@ function toast(msg) {
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+// 面板与右侧按钮栏都贴着右边，面板一开就压在按钮上——开面板时把按钮栏往左让开
+function setPanel(open) {
+  const el = document.getElementById('panel');
+  el.classList.toggle('hidden', !open);
+  document.body.classList.toggle('panel-open', open);
+  if (!open) return;
+  // 按面板**实测**宽度把按钮栏推开：面板宽度会随内容和界面缩放变，写死一个数迟早对不上。
+  // 两者的 zoom 相同，所以换算回未缩放的单位再算。
+  const z = cssNum('--ui-auto') * cssNum('--ui-boost');
+  const w = el.getBoundingClientRect().width / z;
+  document.documentElement.style.setProperty('--bar-right', `${Math.round(22 + w + 12)}px`);
 }
 
 // 设计面板：滑块 → 参数 → 防抖重建
@@ -879,7 +897,7 @@ function doAction(name) {
     case 'tour': setTour(!tour.active); break;
     case 'build': setBuildActive(!build.active); break;
     case 'walk': setWalk(!walk.active); break;
-    case 'panel': document.getElementById('panel').classList.toggle('hidden'); break;
+    case 'panel': setPanel(document.getElementById('panel').classList.contains('hidden')); break;
     case 'section':
       sectionIdx = (sectionIdx + 1) % SECTIONS.length;
       applySection(SECTIONS[sectionIdx].planes);
@@ -1015,7 +1033,7 @@ if (q.get('section')) {
   applySection(SECTIONS[sectionIdx].planes);
 }
 if (q.get('labels')) { labelsOn = true; labelGroup.visible = true; }
-if (q.get('panel')) document.getElementById('panel').classList.remove('hidden');
+if (q.get('panel')) setPanel(true);
 if (q.get('build') != null) {
   setBuildActive(true);
   build.playing = false;

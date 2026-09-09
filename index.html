@@ -156,6 +156,8 @@
     cursor: pointer; backdrop-filter: blur(6px); letter-spacing: .1em;
   }
   #ctrlbar button:hover { border-color: #ffd98f; color: #ffd98f; }
+  /* 面板和按钮栏都贴右边，面板一开就压在按钮上（大屏放大之后尤其明显）——让开 */
+  body.panel-open #ctrlbar { right: var(--bar-right, 320px); }
   body.touring #ctrlbar button { display: none; }
   body.touring #ctrlbar button[data-act="tour"],
   body.touring #ctrlbar button[data-act="mute"] { display: block; }
@@ -168,6 +170,7 @@
     #timeline { padding: 8px 12px; gap: 8px; bottom: 16px; width: 88vw; }
     #timeline #phaseName { display: none; }
     #ctrlbar { bottom: 78px; }
+    body.panel-open #ctrlbar { right: 14px; }   /* 手机上面板几乎占满宽度，让不开 */
     #subtitle h3 { font-size: 16px; }
     #subtitle p.txt { font-size: 12.5px; }
   }
