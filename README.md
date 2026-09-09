@@ -199,6 +199,12 @@ node tools/check-poke.mjs --r=70 --size=1200x840 --gap=0.06
   日常都从这扇小门进出，大扇只在庆典、出殡时才开——所以门有**三档**：
   关 / 便门 / 全开，没有便门的门只有两档。
 - **门颊不用另做**：最内一圈门龛的墙体本身就是门颊，再补一块反而与它面对面共面。
+- **门板的做法照着实物来**：竖向拼板 + 背面横三道**撑条（ledge）**把板钉在一起；
+  正面是铁**铰链带（strap）**，钉子跟着撑条那几行排（不是满门乱撒），从正面打进、
+  背面敲弯钉牢；铰链带套在门框里的 **L 形销轴（pintle）** 上——转轴在门框，不在门板。
+  门**向内开**：这是中世纪教堂门的常规做法。门环是拉门的把手（达勒姆主教座堂那只
+  "庇护门环"是狮首衔环的门锤、挂在北门上，属于个例，没照搬）。
+  还没做的：中柱上本该立一尊像（亚眠的"美丽的上帝"），门楣现在是一块光板。
 - 门扇装在各自的枢轴组里（`src/doors.js`），`K` 键全开全关，面板里的小平面图
   点哪座切哪座。
 
@@ -216,6 +222,14 @@ node tools/check-rain.mjs --wind=0,-0.8 --doors=open     # 落进室内 14 滴 =
 
 西风斜雨、大门全开时，雨会灌到门内 2.6 m 的中厅铺地上——这就是为什么真教堂下雨天
 关门。
+
+门的资料出处：[Early and Vernacular Timber Doors](https://www.buildingconservation.com/articles/early-timber-doors/early-timber-doors.htm)、
+[Early and Vernacular Door Fittings](https://www.buildingconservation.com/articles/doors/door_furniture.htm)、
+[Hinges and pivots in the Middle Ages](https://ebrary.net/281214/environment/hinges_pivots_middle_ages)、
+[Sanctuary knocker](https://en.wikipedia.org/wiki/Sanctuary_knocker)、
+[Wicket Doors](https://idighardware.com/2011/01/wicket-doors/)、
+[Church porch](https://en.wikipedia.org/wiki/Church_porch)、
+[Trumeau](https://en.wikipedia.org/wiki/Trumeau_(architecture))。
 
 ### 室内光照烘焙
 

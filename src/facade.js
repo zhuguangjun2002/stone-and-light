@@ -105,29 +105,36 @@ export function doorAssembly(op, mats, cfg = {}) {
     leaf.castShadow = leaf.receiveShadow = true;
     pivot.add(leaf);
 
-    // 铁铰链带（strap hinge）：从门轴横伸过门板三分之二宽。
-    // 碰上便门那道洞要收住——原来直接横穿过去，从便门里往外看是当中一道横杠。
+    // 中世纪教堂门的实际做法（资料出处见 README）：**竖向拼板**，背面横三四道
+    // **撑条（ledge / batten）**把板钉在一起；正面是铁铰链带，钉子从正面打进、
+    // 背面敲弯钉牢；铰链带不是钉死在门框上，而是套在门框里的 **L 形销轴（pintle）**
+    // 上——所以转轴在门框上，不在门板上。钉子跟着撑条那几行走，不是满门乱撒。
     const wx0 = wickCX - wickW / 2, wy0 = wickY0, wy1 = wickY0 + wickH;
+    const studG = new THREE.SphereGeometry(0.042, 8, 6);
     for (const hy of [doorH * 0.16, doorH * 0.55, doorH * 0.88]) {
-      let w = leafW * 0.66, x0 = side * leafW / 2;
-      if (hasWick && hy > wy0 - 0.1 && hy < wy1 + 0.1) w = Math.max(0.12, Math.abs(x0 - (wx0 - 0.02)));
+      const x0 = side * leafW / 2;
+      const inHole = hasWick && hy > wy0 - 0.1 && hy < wy1 + 0.1;   // 碰上便门洞要收住
+      const w = inHole ? Math.max(0.12, Math.abs(x0 - (wx0 - 0.02))) : leafW * 0.66;
       const strap = new THREE.Mesh(new THREE.BoxGeometry(w, 0.13, 0.03), mats.dark);
       strap.position.set(x0 - side * w / 2, hy - doorH / 2, T / 2 + 0.015);
       leaf.add(strap);
-    }
-    // 门钉（躲开便门那块洞）
-    const studG = new THREE.SphereGeometry(0.045, 8, 6);
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 3; c++) {
-        const x = (c - 1) * leafW * 0.28, y = (r + 0.5) * doorH / 4;
-        if (hasWick && Math.abs(x - wickCX) < wickW / 2 + 0.06 && y > wickY0 - 0.06 && y < wickY0 + wickH + 0.06) continue;
+      const lw = inHole ? w : leafW * 0.94;                          // 背面撑条
+      const ledge = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.16, 0.05), mats.door);
+      ledge.position.set(inHole ? x0 - side * lw / 2 : 0, hy - doorH / 2, -T / 2 - 0.025);
+      leaf.add(ledge);
+      const n = Math.max(2, Math.round(w / 0.34));                   // 钉子沿铰链带排
+      for (let i = 0; i < n; i++) {
         const stud = new THREE.Mesh(studG, mats.dark);
-        stud.position.set(x, y - doorH / 2, T / 2 + 0.03);
+        stud.position.set(x0 - side * (0.08 + (w - 0.16) * (i / (n - 1 || 1))), hy - doorH / 2, T / 2 + 0.035);
         leaf.add(stud);
       }
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.19, 8), mats.dark);
+      pin.position.set(side * (leafW / 2 + 0.012), hy - doorH / 2, T / 2 + 0.015);
+      leaf.add(pin);                                                 // 销轴
     }
-    // 门环（sanctuary ring）：拉门用，也是中世纪"抓住它就受庇护"的那个环。
-    // 原来挂在 1.9 m 高，手够不着——降到 1.05 m，并补一块底板（真门环都钉在铁板上）。
+    // 门环：拉门的把手，钉在铁底板上，1.05 m 高。
+    // （达勒姆主教座堂那只"庇护门环"是狮首衔环的**门锤**、挂在**北门**上，属于个例，
+    //  不是每座门都有，所以这里就做成普通的拉环。）
     const ringY = 1.05 - doorH / 2, ringX = -side * (leafW / 2 - 0.22);
     const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 12), mats.dark);
     plate.rotation.x = Math.PI / 2;
