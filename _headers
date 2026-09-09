@@ -1,9 +1,6 @@
-# Cloudflare Pages 的缓存策略。默认给 src/*.js 缓存 4 小时，每次部署完都要强刷才
-# 看得到改动，而且可能拿到新旧混搭的模块。代码走短缓存 + 必须回源校验；
-# lib/ 是不动的第三方库，长缓存。
-/src/*
-  Cache-Control: public, max-age=60, must-revalidate
 /index.html
+  Cache-Control: public, max-age=60, must-revalidate
+/src/*
   Cache-Control: public, max-age=60, must-revalidate
 /lib/*
   Cache-Control: public, max-age=2592000, immutable
