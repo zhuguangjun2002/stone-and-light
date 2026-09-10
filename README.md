@@ -343,8 +343,14 @@ iOS 的 Safari 根本不支持它，取不到值时不能当成大内存机器�
 
 ## 部署
 
-推送到 main 会自动更新 GitHub Pages 镜像。主站（Cloudflare Pages，绑定 church.bigcow.net）：
+**push 到 main，Cloudflare Pages 自己上线**（项目 `church`，Git 集成，
+无构建步骤、直接发布仓库根目录，`_headers` 会被自动识别）。
+绑定 <https://church.bigcow.net>，回滚在 Cloudflare 面板点 Rollback。
 
-```bash
-CLOUDFLARE_API_TOKEN=... ./tools/deploy-cf.sh
-```
+2026-09-10 之前是两条路并行，都已废止：
+
+- **GitHub Pages 镜像已关闭**。它每次 push 触发 GitHub 内置的
+  `pages build and deploy`，一个月吃掉 85 分钟 Actions 额度，而发布的内容与
+  主站完全重复（这个项目是单文件静态站，根目录就是成品）。
+- **`tools/deploy-cf.sh` 手动直传不再需要**，项目已从 direct upload 改成 Git 集成。
+  脚本留着当应急手段，但正常情况下不要用——直传会绕过 git 历史。
