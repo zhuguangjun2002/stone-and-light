@@ -48,14 +48,12 @@ node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，�
 
 ## 已知待办 / 未定
 
-1. ~~回廊东侧偏紧~~ **已改**：内院 `CLO.garth 18→16`，东缘落到 x=42.9，与南墙住宅
-   前脸（最浅 x≈45.4）之间宽出 ~2.5 m，与西侧扶壁墩过道（~2.6 m）差不多对称。
-2. ~~前庭石板无纹理~~ **已改**：`src/materials.js` 的 `pavingTexture()` 程序化石板贴图；
-   `buildGround` 里石板区按世界坐标铺 UV（一张 6 m 见方）。
-3. **`tour.mp4` 偏旧**：`docs/` 里 5 张无人引用的截图（west / interior / vault / section /
+1. **`tour.mp4` 偏旧**：`docs/` 里 5 张无人引用的截图（west / interior / vault / section /
    apse，连带 `overview.webp`）已删；现在只剩 `overview.png`（最新）与 `tour.mp4`
-   （领地之前拍的）。要更新导览片就按 README「导览影片」一节重录。
-4. 墙头垛口疏密（当前齿 0.9 m / 间距 2.0 m）、院内土院/草地比例，可视口味调。
+   （领地之前拍的）。要更新导览片按 README「导览影片」一节重录。
+
+已调过、暂无待办：前庭石板贴图（`pavingTexture()`）、回廊东西过道对称（`garth=16`）、
+墙头垛口（齿 1.05 / 缺口 0.95 / 高 0.62 m）、后殿东侧土院铺满整个东端。
 
 ## 关于看效果
 

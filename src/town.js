@@ -69,7 +69,7 @@ function wallTop(g, mats, { alongX, cx, cz, len, wallH, wallT, gaps = [] }) {
   const copeH = 0.16, copeD = wallT + 0.28;
   g.add(solid(new THREE.BoxGeometry(alongX ? len : copeD, copeH, alongX ? copeD : len), mats.wallDark,
     cx, wallH + copeH / 2 + 0.01, cz));
-  const mw = 0.9, mh = 0.5, pitch = 2.0, md = wallT + 0.05;
+  const mw = 1.05, mh = 0.62, pitch = 2.0, md = wallT + 0.05;   // 齿略宽于缺口，才像垤口不像掉牙
   for (let t = -len / 2 + mw / 2; t <= len / 2 - mw / 2; t += pitch) {
     const wp = alongX ? cx + t : cz + t;                 // 沿墙方向的世界坐标，用于跳开门洞/门楼
     if (gaps.some(([a, b]) => wp > a && wp < b)) continue;
@@ -372,8 +372,8 @@ function buildGround(mats) {
   patch(mats.grass, 10, 38, -20, -27, 0.04);
   // 西北角草地（墓地与前庭之间）
   patch(mats.grass, 15, 22, -37.5, 64, 0.04);
-  // 后殿东侧压实土院子
-  patch(mats.earth, 40, 14, 0, -45, 0.03);
+  // 后殿东侧压实土院子（铺满整个东端，别在边上留一圈灰广场）
+  patch(mats.earth, 72, 14, 5, -45, 0.03);
   // 南侧长条土院子（回廊与南墙之间）
   patch(mats.earth, 9, 125, 47.5, 12.5, 0.03);
   // 北侧步道（前庭 → 北侧草地）
