@@ -223,15 +223,27 @@ function buildCloister(mats) {
   well.position.set(gcx, 0, gcz);
   g.add(well);
 
-  // 四角落水管 + 院角雨水口：内檐沟的水从这儿排下去，不是让雨直接泻到草地上。
-  // 水槽在院内偏 0.5 m，管就站在四条槽相交的四个点上。
+  // 石砌排水明沟：沿回廊内侧绕院一周，把四角落水管连成一套排水。
+  // 沟比草地略高，中间深色沟槽、两侧石帮；水从檐沟 → 落水管 → 明沟 → 院角小井。
+  const CHW = 0.5, hw = CHW / 2, kb = 0.09;              // 沟宽、半宽、石帮宽
+  const X0 = gx + 0.5, X1 = gx + garth - 0.5;
+  const Z0 = gz + 0.5, Z1 = gz + garth - 0.5;
+  const runZ = (Z1 + hw) - (Z0 - hw), runX = (X1 - hw) - (X0 + hw);
+  const midX = (X0 + X1) / 2, midZ = (Z0 + Z1) / 2;
+  for (const cx of [X0, X1]) {                           // 西 / 东两条：沿 z
+    g.add(solid(new THREE.BoxGeometry(CHW, 0.08, runZ), mats.wallDark, cx, 0.1, midZ));
+    for (const s of [-1, 1]) g.add(solid(new THREE.BoxGeometry(kb, 0.18, runZ), mats.wall, cx + s * (hw - kb / 2 - 0.03), 0.13, midZ));
+  }
+  for (const cz of [Z0, Z1]) {                           // 北 / 南两条：沿 x
+    g.add(solid(new THREE.BoxGeometry(runX, 0.08, CHW), mats.wallDark, midX, 0.1, cz));
+    for (const s of [-1, 1]) g.add(solid(new THREE.BoxGeometry(runX, 0.18, kb), mats.wall, midX, 0.13, cz + s * (hw - kb / 2 - 0.03)));
+  }
+  // 四角落水管 + 沟里的小井（雨水先落井、再沿沟走）
   const pipeG = new THREE.CylinderGeometry(0.09, 0.09, 4.4, 8);
-  const gullyG = new THREE.CylinderGeometry(0.32, 0.4, 0.16, 10);
-  for (const cx of [gx + 0.5, gx + garth - 0.5]) {
-    for (const cz of [gz + 0.5, gz + garth - 0.5]) {
-      g.add(solid(pipeG, mats.lead, cx, 2.2, cz));
-      g.add(solid(gullyG, mats.wallDark, cx, 0.08, cz));
-    }
+  const basinG = new THREE.CylinderGeometry(0.22, 0.26, 0.22, 10);
+  for (const cx of [X0, X1]) for (const cz of [Z0, Z1]) {
+    g.add(solid(pipeG, mats.lead, cx, 2.2, cz));
+    g.add(solid(basinG, mats.lead, cx, 0.14, cz));
   }
   return g;
 }
