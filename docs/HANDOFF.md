@@ -27,7 +27,7 @@
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 四个检查器 + 取景页（shot.html）+ 烘焙对照 + 导览录制 |
+| `tools/` | 四个检查器 + 取景页（shot.html / shoot.mjs）+ 排水演示（drainage.html） + 烘焙对照 + 导览录制 |
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
@@ -53,7 +53,8 @@ node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，�
    （领地之前拍的）。要更新导览片按 README「导览影片」一节重录。
 
 已调过、暂无待办：前庭石板贴图（`pavingTexture()`）、回廊东西过道对称（`garth=16`）、
-回廊内檐沟 + 四角落水管 + 环院石砧明沟、摊棚货台与布篷（前倾、柱头顶篷）、
+回廊内檐沟 + 四角落水管 + 环院石砧明沟 + 暗管 + 渗井（`tools/drainage.html` 可看动画）、
+摊棚货台与布篷（前倾、柱头顶篷）、
 墙头垛口（齿 1.05 / 缺口 0.95 / 高 0.62 m）、后殿东侧土院铺满整个东端。
 
 ## 关于看效果

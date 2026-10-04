@@ -245,6 +245,13 @@ function buildCloister(mats) {
     g.add(solid(pipeG, mats.lead, cx, 2.2, cz));
     g.add(solid(basinG, mats.lead, cx, 0.14, cz));
   }
+
+  // 出水：四角的水都往东南角（X1,Z1）汇，接一根暗管（涵洞）穿过东翼地面，
+  // 排到院外过道里的**渗井**——这就是这套排水的终点，水最后渗进地下。
+  const soakX = 44.3;
+  g.add(solid(new THREE.BoxGeometry(soakX - X1, 0.4, 0.4), mats.lead, (X1 + soakX) / 2, -0.24, Z1));
+  g.add(solid(new THREE.CylinderGeometry(0.72, 0.8, 0.55, 12), mats.wallDark, soakX, -0.3, Z1));    // 井圈（埋在地下）
+  g.add(solid(new THREE.CylinderGeometry(0.6, 0.6, 0.12, 12), mats.lead, soakX, 0.0, Z1));           // 井篦（看得见）
   return g;
 }
 
@@ -487,4 +494,25 @@ export function buildTown(labels = []) {
   // 标记领地网格：针对教堂外壳的检查器（穿刺等）可以据此跳过领地
   root.traverse((o) => { if (o.isMesh) o.userData.town = true; });
   return root;
+}
+
+// 排水演示页（tools/drainage.html）用：把回廊排水的关键几何算出来，与 buildCloister 同步。
+// 返回世界坐标：明沟四角、屋面内/外檐的位置与高度、坡屋面走向、渗井位置。
+export function drainageInfo() {
+  const { x0, z0, garth, depth } = CLO;
+  const gx = x0 + depth, gz = z0 + depth, D = depth, H = 4.4;
+  const hd = (D + 0.9) / 2, th = -Math.atan2(1.1, D);
+  const ct = Math.cos(th), st = Math.sin(th);
+  const zAt = (lz, ly) => D / 2 + ly * st + lz * ct;   // 屋面局部 z → 走廊局部 z
+  const yAt = (lz, ly) => H + 0.95 + ly * ct - lz * st;
+  const zIn = zAt(-hd, -0.15), zOut = zAt(hd, -0.15);
+  const yIn = yAt(-hd, -0.15), yOut = yAt(hd, -0.15);
+  const X0 = gx + 0.5, X1 = gx + garth - 0.5, Z0 = gz + 0.5, Z1 = gz + garth - 0.5;
+  return {
+    gx, gz, garth, depth, X0, X1, Z0, Z1, yIn, yOut, yGut: yIn - 0.16, yChan: 0.14,
+    // 四面屋面的内檐（低）/ 外檐（高）世界坐标（西/东给 x，北/南给 z）
+    eaveIn: { W: gx - zIn, E: gx + garth + zIn, N: gz - zIn, S: gz + garth + zIn },
+    eaveOut: { W: gx - zOut, E: gx + garth + zOut, N: gz - zOut, S: gz + garth + zOut },
+    soak: { x: 44.3, z: Z1 },
+  };
 }

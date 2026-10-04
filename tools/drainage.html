@@ -1,0 +1,313 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>雨水的去向 · 回廊排水演示</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6b7480; font: 14px/1.65 system-ui, sans-serif; color: #eef3f8; }
+  #ui { position: fixed; left: 12px; top: 12px; width: 300px; padding: 14px 16px; border-radius: 12px;
+        background: rgba(16,22,30,.84); backdrop-filter: blur(7px); box-shadow: 0 8px 30px #0006; }
+  #ui h1 { font-size: 17px; margin: 0 0 2px; }
+  #ui .sub { font-size: 12px; color: #93a6b8; margin-bottom: 10px; }
+  #ui .flow { font-size: 12px; color: #bfe0ff; background: #1d2b3a; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; line-height: 1.75; }
+  #ui .flow b { color: #7fd0ff; }
+  #ui label { display: block; margin: 9px 0 2px; font-size: 12px; color: #cbd8e4; }
+  #ui input[type=range] { width: 100%; }
+  #ui .row { display: flex; gap: 8px; margin-top: 10px; }
+  #ui button { flex: 1; padding: 7px; border: 0; border-radius: 7px; background: #2f6ea8; color: #fff; font-size: 13px; cursor: pointer; }
+  #ui button.off { background: #3a4753; color: #9fb0c0; }
+  #ui .chk { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12.5px; color: #d5e2ee; }
+  #stages { margin-top: 12px; border-top: 1px solid #ffffff22; padding-top: 8px; }
+  #stages div { padding: 4px 6px; border-radius: 6px; font-size: 12.5px; color: #b9c6d2; cursor: pointer; }
+  #stages div:hover { background: #ffffff14; color: #fff; }
+  #tip { position: fixed; right: 12px; bottom: 12px; font-size: 12px; color: #c8d4de;
+         background: rgba(16,22,30,.72); padding: 8px 11px; border-radius: 9px; }
+</style>
+
+<div id="ui">
+  <h1>雨水的去向</h1>
+  <div class="sub">大教堂回廊的雨水，一路怎么流、最后去哪</div>
+  <div class="flow">
+    屋面 → <b>内檐沟</b> → <b>落水管</b>（四角）→ <b>明沟</b>（绕院一周）→<br>
+    <b>暗管</b>（穿过东翼地面）→ <b>渗井</b>（院外过道，渗入地下）
+  </div>
+  <label>雨量 <span id="lrn">中</span></label>
+  <input id="rn" type="range" min="0" max="2600" value="1300">
+  <label>流速 <span id="lv">1.0×</span></label>
+  <input id="vs" type="range" min="0" max="30" value="10">
+  <div class="chk"><input id="xray" type="checkbox"><label for="xray" style="margin:0">透视墙体（看里面的管子）</label></div>
+  <div class="chk"><input id="lab" type="checkbox" checked><label for="lab" style="margin:0">显示标注</label></div>
+  <div class="row">
+    <button id="pause">暂停</button>
+    <button id="reset">复位视角</button>
+  </div>
+  <div id="stages"></div>
+</div>
+<div id="tip">拖动环视 · 滚轮远近 · 右键平移 &nbsp;|&nbsp; 点左侧阶段可飞过去看</div>
+
+<script type="importmap">
+  { "imports": { "three": "../lib/three.module.js" } }
+</script>
+<script type="module">
+// 回廊排水演示：把 src/town.js 里那套"屋面→檐沟→落水管→明沟→暗管→渗井"的几何，
+// 用动画水滴走一遍，看清楚水到底怎么走、最后去哪儿。
+// 关键点来自 src/town.js 的 drainageInfo()，和真实模型同一份数据。
+import * as THREE from '../lib/three.module.js';
+import { OrbitControls } from '../lib/OrbitControls.js';
+import { buildCathedral } from '../src/cathedral.js';
+import { drainageInfo } from '../src/town.js';
+
+const D = drainageInfo();
+
+// ---------- 场景 ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#6b7480');
+scene.fog = new THREE.FogExp2('#6b7480', 0.0028);
+scene.add(new THREE.HemisphereLight('#b6c6d6', '#585a52', 1.15));
+const sun = new THREE.DirectionalLight('#d6dee6', 0.9);
+sun.position.set(70, 100, 40); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
+sun.shadow.camera.top = 80; sun.shadow.camera.bottom = -60;
+sun.shadow.camera.near = 20; sun.shadow.camera.far = 300; sun.shadow.bias = -0.0006;
+scene.add(sun, sun.target);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48), new THREE.MeshStandardMaterial({ color: '#6d7360' }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true;
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190), new THREE.MeshStandardMaterial({ color: '#7d7c76' }));
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20); plaza.receiveShadow = true;
+scene.add(ground, plaza);
+
+const root = buildCathedral().root;
+scene.add(root);
+scene.updateMatrixWorld(true);
+
+// ---------- 透视墙体 ----------
+const ghost = [];
+const collect = (o) => o.traverse((m) => {
+  if (!m.isMesh) return;
+  for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) {
+    if (mat && !mat.userData.glazing && !ghost.includes(mat)) ghost.push(mat);
+  }
+});
+collect(root); collect(ground); collect(plaza);
+let xray = false;
+function applyXray() {
+  for (const m of ghost) {
+    if (m.userData._orig === undefined) m.userData._orig = { t: m.transparent, o: m.opacity, d: m.depthWrite };
+    const o = m.userData._orig;
+    m.transparent = xray ? true : o.t;
+    m.opacity = xray ? 0.28 : o.o;
+    m.depthWrite = xray ? false : o.d;
+    m.needsUpdate = true;
+  }
+}
+applyXray();
+
+// ---------- 排水路径（世界坐标，来自 drainageInfo）----------
+const { X0, X1, Z0, Z1, yIn, yOut, yGut, yChan, soak } = D;
+class Flow {
+  constructor(pts, speed) {
+    this.pts = pts.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    this.lens = []; this.len = 0;
+    for (let i = 0; i < this.pts.length - 1; i++) { const d = this.pts[i].distanceTo(this.pts[i + 1]); this.lens.push(d); this.len += d; }
+    this.speed = speed;
+  }
+  at(s, out) {
+    s = s < 0 ? 0 : s > this.len ? this.len : s;
+    let i = 0; while (i < this.lens.length && s > this.lens[i]) { s -= this.lens[i]; i++; }
+    if (i >= this.lens.length) return out.copy(this.pts[this.pts.length - 1]);
+    const t = this.lens[i] ? s / this.lens[i] : 0;
+    return out.lerpVectors(this.pts[i], this.pts[i + 1], t);
+  }
+}
+const flows = [];
+const add = (pts, speed) => flows.push(new Flow(pts, speed));
+
+// ① 屋面径流：外檐（高）→ 内檐（低），每面铺几条
+const n = 6, zA = 13.6, zB = 36.8, xA = 21.2, xB = 40.2;
+for (let k = 0; k < n; k++) {
+  const tz = zA + (zB - zA) * (k + 0.5) / n;
+  const tx = xA + (xB - xA) * (k + 0.5) / n;
+  add([[D.eaveOut.W, yOut + 0.32, tz], [D.eaveIn.W, yIn + 0.32, tz]], 1.5);
+  add([[D.eaveOut.E, yOut + 0.32, tz], [D.eaveIn.E, yIn + 0.32, tz]], 1.5);
+  add([[tx, yOut + 0.32, D.eaveOut.N], [tx, yIn + 0.32, D.eaveIn.N]], 1.5);
+  add([[tx, yOut + 0.32, D.eaveOut.S], [tx, yIn + 0.32, D.eaveIn.S]], 1.5);
+}
+// ② 檐沟：各面沟里的水朝出口方向流
+add([[X0, yGut, Z0], [X0, yGut, Z1]], 1.3);   // 西沟 → 南
+add([[X0, yGut, Z0], [X1, yGut, Z0]], 1.3);   // 北沟 → 东
+add([[X1, yGut, Z0], [X1, yGut, Z1]], 1.3);   // 东沟 → 南
+add([[X0, yGut, Z1], [X1, yGut, Z1]], 1.3);   // 南沟 → 东
+// ③ 落水管：四角直下
+for (const [cx, cz] of [[X0, Z0], [X1, Z0], [X1, Z1], [X0, Z1]]) add([[cx, yGut, cz], [cx, 0.16, cz]], 3.0);
+// ④ 明沟：各角沿沟汇到东南角（X1,Z1）
+add([[X0, yChan, Z0], [X1, yChan, Z0], [X1, yChan, Z1]], 0.9);
+add([[X1, yChan, Z0], [X1, yChan, Z1]], 0.9);
+add([[X0, yChan, Z1], [X1, yChan, Z1]], 0.9);
+// ⑤ 暗管 + 渗井
+add([[X1, yChan, Z1], [X1, -0.2, Z1], [soak.x, -0.2, soak.z], [soak.x, -0.5, soak.z]], 1.1);
+
+// ---------- 水滴（发光 Points）----------
+const PER = 16;
+const N = flows.length * PER;
+const wpos = new Float32Array(N * 3);
+const sArr = new Float32Array(N);
+const flowOf = new Int32Array(N);
+{
+  let k = 0;
+  for (let fi = 0; fi < flows.length; fi++) for (let j = 0; j < PER; j++) {
+    flowOf[k] = fi; sArr[k] = (j / PER + Math.random() * 0.05) * flows[fi].len; k++;
+  }
+}
+const dotTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(240,252,255,1)'); gr.addColorStop(0.3, 'rgba(150,220,255,1)');
+  gr.addColorStop(0.7, 'rgba(70,160,235,0.65)'); gr.addColorStop(1, 'rgba(40,120,210,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const waterGeo = new THREE.BufferGeometry();
+waterGeo.setAttribute('position', new THREE.BufferAttribute(wpos, 3));
+const water = new THREE.Points(waterGeo,
+  new THREE.PointsMaterial({ map: dotTex, size: 0.55, sizeAttenuation: true, transparent: true, depthWrite: false, opacity: 1 }));
+water.frustumCulled = false;
+scene.add(water);
+const _a = new THREE.Vector3();
+
+// ---------- 雨 ----------
+const RN = 1500;
+const rainGeo = new THREE.BufferGeometry();
+const rainPos = new Float32Array(RN * 6);
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: '#9fb6c8', transparent: true, opacity: 0.5 }));
+rain.frustumCulled = false;
+scene.add(rain);
+const rx = new Float32Array(RN), ry = new Float32Array(RN), rz = new Float32Array(RN);
+for (let i = 0; i < RN; i++) { rx[i] = GX0() + Math.random() * 44; rz[i] = 6 + Math.random() * 44; ry[i] = Math.random() * 26; }
+function GX0() { return 8; }
+function resetDrop(i) { rx[i] = 8 + Math.random() * 44; rz[i] = 6 + Math.random() * 44; ry[i] = 20 + Math.random() * 8; }
+
+// ---------- 渗井里的水 ----------
+const pool = new THREE.Mesh(new THREE.CircleGeometry(0.58, 20),
+  new THREE.MeshBasicMaterial({ color: '#5fb2e6', transparent: true, opacity: 0.55, depthWrite: false }));
+pool.rotation.x = -Math.PI / 2; pool.position.set(soak.x, 0.11, soak.z);
+scene.add(pool);
+
+// ---------- 标注 ----------
+function labelSprite(text) {
+  const c = document.createElement('canvas'), s = 2;
+  c.width = 300 * s; c.height = 46 * s;
+  const g = c.getContext('2d'); g.scale(s, s);
+  g.fillStyle = 'rgba(18,28,40,.88)'; g.beginPath(); g.roundRect(0, 0, 300, 46, 9); g.fill();
+  g.strokeStyle = '#7fd0ff'; g.lineWidth = 2; g.stroke();
+  g.fillStyle = '#dff1ff'; g.font = 'bold 21px system-ui, sans-serif'; g.textBaseline = 'middle';
+  g.fillText(text, 12, 24);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  sp.scale.set(7.2, 1.1, 1);
+  return sp;
+}
+const labelGroup = new THREE.Group();
+scene.add(labelGroup);
+const putLabel = (text, x, y, z) => { const s = labelSprite(text); s.position.set(x, y, z); labelGroup.add(s); };
+putLabel('① 屋面（外高内低）', (D.eaveIn.W + D.eaveOut.W) / 2, yOut + 0.9, 25);
+putLabel('② 内檐沟', D.eaveIn.W - 0.2, yGut + 0.7, 27);
+putLabel('③ 落水管（四角）', X1 + 0.2, 3.0, Z1 + 0.3);
+putLabel('④ 明沟（绕院）', (X0 + X1) / 2 - 1, 0.9, Z1 + 0.4);
+putLabel('⑤ 暗管', (X1 + soak.x) / 2, 0.6, Z1 + 0.2);
+putLabel('⑥ 渗井（终点）', soak.x, 1.6, Z1 + 0.6);
+
+// ---------- 相机 & 视角 ----------
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.2, 3000);
+camera.position.set(60, 26, 56);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(31, 3, 26);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxDistance = 300;
+const VIEW0 = { pos: [60, 26, 56], tgt: [31, 3, 26] };
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+const STAGES = [
+  ['① 屋面：外檐高、内檐低，水往檐口走', [14, 11, 42], [23, 5, 22], false],
+  ['② 内檐沟：一圈铅皮槽把水收住', [26, 7, 32], [23.2, 4.4, 20], true],
+  ['③ 落水管：四角引到地面', [43.5, 5, 29.5], [38.2, 2.6, 32.7], true],
+  ['④ 明沟：绕院一周汇向东南角', [33, 7, 32], [30, 1, 27], true],
+  ['⑤ 暗管：穿过东翼地面', [46, 3.5, 28], [43, 0.2, 32], true],
+  ['⑥ 渗井（终点）：水渗入地下', [50, 3.5, 27.5], [44.3, 0, 32.7], true],
+];
+const stagesEl = document.getElementById('stages');
+for (const [name, p, t, xr] of STAGES) {
+  const d = document.createElement('div'); d.textContent = name;
+  d.onclick = () => {
+    camera.position.set(...p); controls.target.set(...t);
+    xray = xr; $('xray').checked = xr; applyXray();
+  };
+  stagesEl.appendChild(d);
+}
+
+// ---------- 交互 ----------
+const $ = (id) => document.getElementById(id);
+let paused = false, flowMul = 1;
+$('rn').oninput = () => { $('lrn').textContent = ['无', '小', '中', '大'][Math.min(3, Math.round($('rn').value / 900))]; };
+$('vs').oninput = () => { flowMul = $('vs').value / 10; $('lv').textContent = flowMul.toFixed(1) + '×'; };
+$('xray').onchange = () => { xray = $('xray').checked; applyXray(); };
+$('lab').onchange = () => { labelGroup.visible = $('lab').checked; };
+$('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? '继续' : '暂停'; $('pause').classList.toggle('off', paused); };
+$('reset').onclick = () => { camera.position.set(...VIEW0.pos); controls.target.set(...VIEW0.tgt); };
+
+// ---------- 动画 ----------
+const clock = new THREE.Clock();
+function frame() {
+  const dt = Math.min(0.05, clock.getDelta());
+  const t = clock.elapsedTime;
+
+  if (!paused) {
+    // 水滴
+    for (let i = 0; i < N; i++) {
+      const f = flows[flowOf[i]];
+      sArr[i] += f.speed * flowMul * 3 * dt;
+      if (sArr[i] > f.len) sArr[i] -= f.len;
+      f.at(sArr[i], _a);
+      wpos[i * 3] = _a.x; wpos[i * 3 + 1] = _a.y; wpos[i * 3 + 2] = _a.z;
+    }
+    waterGeo.attributes.position.needsUpdate = true;
+    // 雨
+    const nRain = +$('rn').value;
+    for (let i = 0; i < RN; i++) {
+      const o = i * 6;
+      if (i >= nRain) { rainPos.fill(0, o, o + 6); continue; }
+      ry[i] -= 22 * dt; if (ry[i] < 0.2) resetDrop(i);
+      rainPos[o] = rx[i]; rainPos[o + 1] = ry[i]; rainPos[o + 2] = rz[i];
+      rainPos[o + 3] = rx[i]; rainPos[o + 4] = ry[i] + 0.8; rainPos[o + 5] = rz[i];
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
+  // 渗井水面轻轻起伏
+  const k = 1 + 0.12 * Math.sin(t * 2.2);
+  pool.scale.set(k, k, k);
+  pool.material.opacity = 0.4 + 0.2 * Math.sin(t * 2.2);
+
+  // 标注保持屏幕大小（远近看都一样高）
+  const kLab = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / innerHeight * 24;
+  for (const s of labelGroup.children) {
+    const h = camera.position.distanceTo(s.position) * kLab;
+    s.scale.set(h * 6.52, h, 1);
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(frame);
+window.__ready = true;
+window.__view = (px, py, pz, tx, ty, tz) => { camera.position.set(px, py, pz); controls.target.set(tx, ty, tz); };
+window.__xray = (on) => { xray = !!on; const el = document.getElementById('xray'); if (el) el.checked = xray; applyXray(); };
+</script>
