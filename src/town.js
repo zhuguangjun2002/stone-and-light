@@ -400,7 +400,13 @@ function buildMarket(mats, rnd) {
     const awn = solid(new THREE.BoxGeometry(4.4, 0.16, 3.6), mats.awning[ai], sx, 2.7, sz);
     awn.rotation.z = 0.16;
     g.add(awn);
-    g.add(solid(new THREE.BoxGeometry(3.4, 0.9, 0.16), mats.wood, sx, 0.85, sz + 1.2));
+    // 货台：一张靠在前柱上的长桌（台面 + 两条板腿）。
+    // 原来是一块竖着的板 BoxGeometry(3.4, 0.9, 0.16) 悬在 y=0.85，底下没腿、上面没台面，
+    // 看起来就像一张缺腿的桌子。
+    g.add(solid(new THREE.BoxGeometry(3.2, 0.12, 0.8), mats.wood, sx, 0.9, sz + 0.85));
+    for (const lx of [-1.35, 1.35]) {
+      g.add(solid(new THREE.BoxGeometry(0.14, 0.86, 0.7), mats.wood, sx + lx, 0.43, sz + 0.85));
+    }
   }
   return g;
 }
