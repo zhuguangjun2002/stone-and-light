@@ -392,13 +392,17 @@ function buildMarket(mats, rnd) {
   g.add(solid(new THREE.CylinderGeometry(0.28, 0.34, 3.4, 8), mats.wallDark, mx, 1.95, mz));
   g.add(solid(new THREE.BoxGeometry(0.2, 1.3, 0.2), mats.gold, mx, 4.3, mz));
   g.add(solid(new THREE.BoxGeometry(0.95, 0.2, 0.2), mats.gold, mx, 4.55, mz));
-  // 摊棚：四根柱子 + 布篷 + 柜台
+  // 摊棚：四根柱子 + 布篷 + 货台
+  const AWN_Y = 2.7, AWN_T = 0.16, AWN_TILT = 0.16;   // 布篷中心高、板厚、绕 z 的倾角
+  // 布篷倾斜后，底面在世界 x 处的高度——柱头要正好顶到这里
+  const awnUnder = (sx, wx) => AWN_Y + (wx - sx) * Math.tan(AWN_TILT) - (AWN_T / 2) / Math.cos(AWN_TILT);
   for (const [sx, sz, ai] of [[-14, 64, 0], [-22, 58, 1], [18, 58, 2], [24, 68, 0]]) {
     for (const px of [-1.8, 1.8]) for (const pz of [-1.4, 1.4]) {
-      g.add(solid(new THREE.BoxGeometry(0.14, 2.4, 0.14), mats.wood, sx + px, 1.2, sz + pz));
+      const h = awnUnder(sx, sx + px) + 0.03;   // 柱头插进布篷 3 cm，不留缝也不穿出篷面
+      g.add(solid(new THREE.BoxGeometry(0.14, h, 0.14), mats.wood, sx + px, h / 2, sz + pz));
     }
-    const awn = solid(new THREE.BoxGeometry(4.4, 0.16, 3.6), mats.awning[ai], sx, 2.7, sz);
-    awn.rotation.z = 0.16;
+    const awn = solid(new THREE.BoxGeometry(4.4, AWN_T, 3.6), mats.awning[ai], sx, AWN_Y, sz);
+    awn.rotation.z = AWN_TILT;
     g.add(awn);
     // 货台：一张靠在前柱上的长桌（台面 + 两条板腿）。
     // 原来是一块竖着的板 BoxGeometry(3.4, 0.9, 0.16) 悬在 y=0.85，底下没腿、上面没台面，
