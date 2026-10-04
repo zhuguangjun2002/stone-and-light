@@ -39,6 +39,8 @@ function townMaterials() {
     wood: M('#4a3320', 0.8),
     grass: M('#6d7c4c', 1),
     path: M('#948e80', 1),
+    paving: M('#c4b690', 1),     // 前庭石板
+    earth: M('#8a7d62', 1),      // 压实土
     grave: M('#9a9384'),
     tree: M('#4d5f36', 1),
     trunk: M('#4a3a28'),
@@ -57,6 +59,20 @@ function solid(geo, mat, x, y, z, ry = 0) {
   m.castShadow = m.receiveShadow = true;
   m.userData.buildSkip = true;
   return m;
+}
+
+// 墙头收口：压顶石 + 垤口。沿墙方向用世界坐标给（alongX 表示墙沿 x 延伸，否则沿 z）。
+function wallTop(g, mats, { alongX, cx, cz, len, wallH, wallT, gaps = [] }) {
+  const copeH = 0.16, copeD = wallT + 0.28;
+  g.add(solid(new THREE.BoxGeometry(alongX ? len : copeD, copeH, alongX ? copeD : len), mats.wallDark,
+    cx, wallH + copeH / 2 + 0.01, cz));
+  const mw = 0.9, mh = 0.5, pitch = 2.0, md = wallT + 0.05;
+  for (let t = -len / 2 + mw / 2; t <= len / 2 - mw / 2; t += pitch) {
+    const wp = alongX ? cx + t : cz + t;                 // 沿墙方向的世界坐标，用于跳开门洞/门楼
+    if (gaps.some(([a, b]) => wp > a && wp < b)) continue;
+    g.add(solid(new THREE.BoxGeometry(alongX ? mw : md, mh, alongX ? md : mw), mats.wall,
+      alongX ? cx + t : cx, wallH + copeH + mh / 2 + 0.01, alongX ? cz : cz + t));
+  }
 }
 
 // 领地围墙：四面墙，西面开正门、东面开殡门、南北各开一道便门
@@ -95,6 +111,20 @@ function buildWalls(mats) {
   for (const sx of [1, -1]) for (const sz of [1, -1]) {
     const pin = makePinnacle(mats.wallDark, 1.1);
     pin.position.set(sx * (GH_W / 2 - 0.7), GH_H, WZ + sz * (GH_D / 2 - 0.7));
+    pin.traverse((o) => { if (o.isMesh) o.userData.buildSkip = true; });
+    g.add(pin);
+  }
+
+  // 墙头收口：压顶石 + 垤口（跳过门洞与门楼），四角小塔楼
+  wallTop(g, mats, { alongX: true,  cx,     cz: WZ, len: spanX, wallH: WALL_H,         wallT: WALL_T, gaps: [[-5.6, 5.6]] });
+  wallTop(g, mats, { alongX: true,  cx,     cz: EZ, len: spanX, wallH: WALL_H + 0.02,  wallT: WALL_T, gaps: [[-2.2, 2.2]] });
+  wallTop(g, mats, { alongX: false, cx: SX, cz,     len: spanZ, wallH: WALL_H - 0.03,  wallT: WALL_T, gaps: [[18.5, 21.5]] });
+  wallTop(g, mats, { alongX: false, cx: NX, cz,     len: spanZ, wallH: WALL_H + 0.05,  wallT: WALL_T, gaps: [[-21.5, -18.5]] });
+  const cornerH = WALL_H + 1.0;
+  for (const [tx, tz] of [[SX, WZ], [SX, EZ], [NX, WZ], [NX, EZ]]) {
+    g.add(solid(new THREE.BoxGeometry(1.1, cornerH, 1.1), mats.wallDark, tx, cornerH / 2, tz));
+    const pin = makePinnacle(mats.wall, 0.8);
+    pin.position.set(tx, cornerH, tz);
     pin.traverse((o) => { if (o.isMesh) o.userData.buildSkip = true; });
     g.add(pin);
   }
@@ -312,11 +342,37 @@ function makeTree(mats, s, rnd, x, z, yew = false) {
   return g;
 }
 
-// 西前庭集市：市场十字 + 几处摊棚，以及从正门通向中门的石板路
+// 院内地面分级：把原来一整块灰广场，拆成 前庭石板 / 草地 / 压实土 几档。
+// 每档用薄平面叠在广场上（y 各差几厘米，避免共面），材质 noBake、网格 buildSkip。
+function buildGround(mats) {
+  const g = new THREE.Group();
+  const patch = (mat, w, d, x, z, y) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y, z);
+    m.receiveShadow = true;
+    m.userData.buildSkip = true;
+    g.add(m);
+  };
+  // 西前庭石板（正门到西立面，集市所在）
+  patch(mats.paving, 58, 24, 0, 65, 0.06);
+  // 教堂北侧草地（两段，让开耳堂横臂）
+  patch(mats.grass, 10, 38, -20, 27, 0.04);
+  patch(mats.grass, 10, 38, -20, -27, 0.04);
+  // 西北角草地（墓地与前庭之间）
+  patch(mats.grass, 15, 22, -37.5, 64, 0.04);
+  // 后殿东侧压实土院子
+  patch(mats.earth, 40, 14, 0, -45, 0.03);
+  // 南侧长条土院子（回廊与南墙之间）
+  patch(mats.earth, 9, 125, 47.5, 12.5, 0.03);
+  // 北侧步道（前庭 → 北侧草地）
+  patch(mats.paving, 2, 42, -17.5, 31, 0.06);
+  return g;
+}
+
+// 西前庭集市：市场十字 + 几处摊棚（正门到西立面的石板路现由 buildGround 的西前庭覆盖）
 function buildMarket(mats, rnd) {
   const g = new THREE.Group();
-  // 石板路：正门（z=WZ）到西立面（z≈50）
-  g.add(solid(new THREE.BoxGeometry(7, 0.12, WZ - 50), mats.path, 0, 0.06, (WZ + 50) / 2));
   // 市场十字：三级台座 + 石柱 + 十字
   const mx = 13, mz = 66;
   for (let i = 0; i < 3; i++) {
@@ -355,6 +411,7 @@ export function buildTown(labels = []) {
   const root = new THREE.Group();
 
   root.add(buildWalls(mats));
+  root.add(buildGround(mats));
   // 围墙之外是田野，别让灰色广场一直铺到天边（广场是主场景里铺好的，这里只盖外面）
   const outerGrass = (w, d, x, z) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mats.grass);
