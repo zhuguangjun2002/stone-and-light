@@ -52,9 +52,9 @@ node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，�
    前脸（最浅 x≈45.4）之间宽出 ~2.5 m，与西侧扶壁墩过道（~2.6 m）差不多对称。
 2. ~~前庭石板无纹理~~ **已改**：`src/materials.js` 的 `pavingTexture()` 程序化石板贴图；
    `buildGround` 里石板区按世界坐标铺 UV（一张 6 m 见方）。
-3. **媒体过期**：`docs/` 里 5 张截图（west / interior / vault / section / apse）**没有任何
-   地方引用**，且都是领地之前拍的；`tour.mp4` 也偏旧，只有 `docs/overview.png` 最新。
-   要么重拍并挂进 README 画廊，要么删掉这些孤儿文件。
+3. **`tour.mp4` 偏旧**：`docs/` 里 5 张无人引用的截图（west / interior / vault / section /
+   apse，连带 `overview.webp`）已删；现在只剩 `overview.png`（最新）与 `tour.mp4`
+   （领地之前拍的）。要更新导览片就按 README「导览影片」一节重录。
 4. 墙头垛口疏密（当前齿 0.9 m / 间距 2.0 m）、院内土院/草地比例，可视口味调。
 
 ## 关于看效果
