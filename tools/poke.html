@@ -34,6 +34,7 @@ scene.traverse((o) => {
   if (!o.isMesh || !o.geometry?.attributes?.position) return;
   const m = Array.isArray(o.material) ? o.material[0] : o.material;
   if (m && m.depthWrite === false) { o.visible = false; return; }   // 光柱光斑不算外皮
+  if (o.userData.town) { o.visible = false; return; }               // 领地是独立个体，不纳入教堂外壳的穿刺判定
   meshes.push(o);
 });
 const idMat = meshes.map((o, i) => {

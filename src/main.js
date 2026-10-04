@@ -7,7 +7,7 @@ import { buildCathedral } from './cathedral.js';
 import { applyBakedColors, bakeableMeshes } from './bake.js';
 import { collectDoors, setDoorState, nextState, updateDoors, doorBlocks, STATE_NAMES } from './doors.js';
 import { buildGrid } from './grid.js';
-import { canvasTexture } from './materials.js';
+import { canvasTexture, mulberry32 } from './materials.js';
 import { P, recomputeDerived } from './params.js';
 import { archApex } from './gothic.js';
 import { TOUR } from './tour.js';
@@ -109,6 +109,34 @@ plaza.position.set(0, 0, 20);        // 与墙脚齐平（低于墙脚会在墙�
 plaza.receiveShadow = true;
 scene.add(plaza);
 
+// 地面之下的泥土层：一张法线朝下的土色面片。大地/广场/地坪/草地都是单面朝上，
+// 从下面看被背面剔除，露出的就是这层泥土——比"双面地面"那种一整片无光的黑幕真实。
+const soilTex = canvasTexture(512, 512, (ctx, w, h) => {
+  const rnd = mulberry32(7);
+  ctx.fillStyle = '#5d4a33'; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 4200; i++) {
+    const v = rnd();
+    ctx.fillStyle = v < 0.5
+      ? `rgba(28,20,12,${0.10 + rnd() * 0.25})`
+      : `rgba(122,100,72,${0.05 + rnd() * 0.18})`;
+    ctx.beginPath(); ctx.arc(rnd() * w, rnd() * h, 1 + rnd() * 5, 0, Math.PI * 2); ctx.fill();
+  }
+  for (let i = 0; i < 26; i++) {                 // 几道岩层
+    ctx.strokeStyle = `rgba(18,12,7,${0.06 + rnd() * 0.12})`;
+    ctx.lineWidth = 1 + rnd() * 3;
+    const y = rnd() * h;
+    ctx.beginPath(); ctx.moveTo(0, y);
+    ctx.bezierCurveTo(w * 0.3, y + (rnd() - 0.5) * 46, w * 0.7, y + (rnd() - 0.5) * 46, w, y);
+    ctx.stroke();
+  }
+});
+if (soilTex) soilTex.repeat.set(150, 150);
+const soil = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
+  new THREE.MeshBasicMaterial({ color: '#ffffff', map: soilTex }));
+soil.rotation.x = Math.PI / 2;                   // 法线朝下（-y）
+soil.position.y = -2.5;                         // 与地基配合：地基从 -0.02 埋到 -3.0，土面在 -2.5，地基半截入土
+scene.add(soil);
+
 // ---------- 结构标注 ----------
 function makeLabelSprite(text) {
   const fs = 40, padX = 26, padY = 15, tail = 18;
@@ -195,7 +223,7 @@ function updateLabels() {
 }
 
 // ---------- 大教堂的装配 / 重建 ----------
-let root = null, labelGroup = null;
+let root = null, labelGroup = null, foundGroup = null;
 let labelSprites = [];
 let cathedralMats = new Set();
 let buildList = [];               // 建造动画的构件次序
@@ -212,6 +240,11 @@ function disposeCathedral() {
     if (o.material) { o.material.map?.dispose(); o.material.dispose(); }
   });
   scene.remove(root, labelGroup);
+  if (foundGroup) {
+    foundGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    scene.remove(foundGroup);
+    foundGroup = null;
+  }
   for (const g of geos) g.dispose();
   for (const m of mats) { m.map?.dispose(); m.dispose(); }
   root = labelGroup = null;
@@ -224,6 +257,7 @@ function computeBuildOrder() {
   root.updateMatrixWorld(true);
   root.traverse((o) => {
     if (!o.isMesh) return;
+    if (o.userData.buildSkip) return;   // 领地不参与建造动画（镇子先于教堂存在）
     box.setFromObject(o);
     const cx = (box.min.x + box.max.x) / 2;
     const cy = (box.min.y + box.max.y) / 2;
@@ -249,10 +283,43 @@ function computeBuildOrder() {
   buildList = entries.map((e) => e.o);
 }
 
+// 地基：把着地的墙/柱往下延一段，从地下看"墙脚戳进土里"。
+// 这是纯视觉层，挂在 scene 而不是 root：不进碰撞、不进烘焙、不进建造动画，
+// 也不会被 check-zfight/rain/poke/flicker 看见（它们只 buildCathedral）。
+function addFoundations(root) {
+  const mat = new THREE.MeshBasicMaterial({ color: '#7d7160' });
+  const group = new THREE.Group();
+  const box = new THREE.Box3();
+  const FT = -0.02, FB = -3.0;               // 地基顶/底（土面在 -2.5，地基埋进去半米）
+  let i = 0;
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    if (!o.isMesh || o.userData.noFoundation) return;
+    const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!m || m.transparent || m.depthWrite === false || m.userData?.glazing) return;
+    box.setFromObject(o);
+    if (box.min.y > 0.08) return;            // 不接地
+    if (box.max.y < 1.2) return;             // 地坪/长椅/墓碑这类低矮件
+    if (box.max.y > 50) return;              // 尖塔等高空构件
+    const w = (box.max.x - box.min.x) * 0.96;
+    const d = (box.max.z - box.min.z) * 0.96;
+    if (w < 0.4 || d < 0.4) return;
+    const j = (i++ % 9) * 0.02;              // 相邻/重叠地基的顶底各差一点，避免共面
+    const top = FT - j, bot = FB - j;
+    const f = new THREE.Mesh(new THREE.BoxGeometry(w, top - bot, d), mat);
+    f.position.set((box.min.x + box.max.x) / 2, (top + bot) / 2, (box.min.z + box.max.z) / 2);
+    f.userData.foundation = true;
+    group.add(f);
+  });
+  return group;
+}
+
 function mountCathedral() {
   const built = buildCathedral();
   root = built.root;
   scene.add(root);
+  foundGroup = addFoundations(root);
+  scene.add(foundGroup);
 
   labelGroup = new THREE.Group();
   labelGroup.visible = labelsOn;
@@ -285,7 +352,7 @@ function mountCathedral() {
 // 静态的光离线算、运行时只查表，就是游戏里 lightmap 的做法。这里把活分给几个
 // Worker：每个 Worker 自己建一遍教堂、烘 index % n === k 的那些网格，结果按下标
 // 拼回来。算过的结果按参数指纹存进 IndexedDB，下次进站直接贴上去。
-const BAKE_VER = 1;
+const BAKE_VER = 2;   // v2：加入了领地（回廊/住宅）作为遮挡与反弹面
 let bakeJob = 0, bakeWorkers = [], baking = false;
 const bakeInfoEl = () => document.getElementById('bakeInfo');
 const bakeKey = () => `v${BAKE_VER}:` + JSON.stringify(P);
@@ -1057,6 +1124,7 @@ addEventListener('resize', () => {
 const clock = new THREE.Clock();
 let firstFrame = true;
 let lastDraw = 0;
+
 function animate() {
   requestAnimationFrame(animate);
   // 烘焙时把帧率压到 ~12 fps：这个场景一帧一千两百多个 draw call，主线程本身就吃满

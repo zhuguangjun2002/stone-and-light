@@ -30,7 +30,7 @@ export function bakeableMeshes(scene) {
   scene.traverse((o) => {
     if (!o.isMesh || !o.geometry?.attributes?.position || !o.geometry.attributes.normal) return;
     const m = Array.isArray(o.material) ? o.material[0] : o.material;
-    if (!m || m.userData?.glazing || m.depthWrite === false) return;      // 玻璃、光柱不烘
+    if (!m || m.userData?.glazing || m.userData?.noBake || m.depthWrite === false) return;      // 玻璃、光柱、领地不烘
     if (!m.isMeshStandardMaterial && !m.isMeshLambertMaterial && !m.isMeshPhongMaterial) return;
     out.push(o);
   });

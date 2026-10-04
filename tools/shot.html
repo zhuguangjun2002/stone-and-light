@@ -4,6 +4,7 @@
 // 无头截图用的取景页：与 main.js 同一套光照/地面，但相机由外部脚本指定。
 import * as THREE from '../lib/three.module.js';
 import { buildCathedral } from '../src/cathedral.js';
+import { canvasTexture, mulberry32 } from '../src/materials.js';
 const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 r.setSize(1280, 720); r.setPixelRatio(1); r.shadowMap.enabled = true;
 r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping;
@@ -26,7 +27,58 @@ const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
   new THREE.MeshStandardMaterial({ color: '#9b968b' }));
 plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, 0, 20); plaza.receiveShadow = true;
 scene.add(ground, plaza);
-scene.add(buildCathedral().root);
+const soilTex = canvasTexture(512, 512, (ctx, w, h) => {
+  const rnd = mulberry32(7);
+  ctx.fillStyle = '#5d4a33'; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 4200; i++) {
+    const v = rnd();
+    ctx.fillStyle = v < 0.5
+      ? `rgba(28,20,12,${0.10 + rnd() * 0.25})`
+      : `rgba(122,100,72,${0.05 + rnd() * 0.18})`;
+    ctx.beginPath(); ctx.arc(rnd() * w, rnd() * h, 1 + rnd() * 5, 0, Math.PI * 2); ctx.fill();
+  }
+  for (let i = 0; i < 26; i++) {
+    ctx.strokeStyle = `rgba(18,12,7,${0.06 + rnd() * 0.12})`;
+    ctx.lineWidth = 1 + rnd() * 3;
+    const y = rnd() * h;
+    ctx.beginPath(); ctx.moveTo(0, y);
+    ctx.bezierCurveTo(w * 0.3, y + (rnd() - 0.5) * 46, w * 0.7, y + (rnd() - 0.5) * 46, w, y);
+    ctx.stroke();
+  }
+});
+if (soilTex) soilTex.repeat.set(150, 150);
+const soil = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
+  new THREE.MeshBasicMaterial({ color: '#ffffff', map: soilTex }));
+soil.rotation.x = Math.PI / 2; soil.position.y = -2.5;
+scene.add(soil);
+
+function addFoundations(root) {
+  const mat = new THREE.MeshBasicMaterial({ color: '#7d7160' });
+  const group = new THREE.Group();
+  const box = new THREE.Box3();
+  const FT = -0.02, FB = -3.0;
+  let i = 0;
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    if (!o.isMesh || o.userData.noFoundation) return;
+    const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!m || m.transparent || m.depthWrite === false || m.userData?.glazing) return;
+    box.setFromObject(o);
+    if (box.min.y > 0.08 || box.max.y < 1.2 || box.max.y > 50) return;
+    const w = (box.max.x - box.min.x) * 0.96, d = (box.max.z - box.min.z) * 0.96;
+    if (w < 0.4 || d < 0.4) return;
+    const j = (i++ % 9) * 0.02;
+    const top = FT - j, bot = FB - j;
+    const f = new THREE.Mesh(new THREE.BoxGeometry(w, top - bot, d), mat);
+    f.position.set((box.min.x + box.max.x) / 2, (top + bot) / 2, (box.min.z + box.max.z) / 2);
+    group.add(f);
+  });
+  return group;
+}
+
+const builtRoot = buildCathedral().root;
+scene.add(builtRoot);
+scene.add(addFoundations(builtRoot));
 const cam = new THREE.PerspectiveCamera(55, 1280 / 720, 0.5, 2000);
 window.__sunAt = (t) => {                       // 与 main.js 的日照曲线一致
   const s = Math.sin(Math.PI * t), az = Math.PI * t, el = (7 + 56 * s) * Math.PI / 180, R = 170;
