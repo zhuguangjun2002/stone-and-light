@@ -431,6 +431,10 @@ iOS 的 Safari 根本不支持它，取不到值时不能当成大内存机器�
 无构建步骤、直接发布仓库根目录，`_headers` 会被自动识别）。
 绑定 <https://church.bigcow.net>，回滚在 Cloudflare 面板点 Rollback。
 
+**部署有个坑：单文件上限 25 MiB。** 任一文件超了，**整个部署会失败**（连别的小文件
+也不更新，线上还是旧版）。二进制就 `docs/tour.mp4` 一个，用 crf 24 约 23 MB 刚好进线；
+重录片子后记得 `du -h docs/tour.mp4` 看一眼。
+
 2026-09-10 之前是两条路并行，都已废止：
 
 - **GitHub Pages 镜像已关闭**。它每次 push 触发 GitHub 内置的

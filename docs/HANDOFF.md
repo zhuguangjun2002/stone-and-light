@@ -22,40 +22,46 @@
 | 文件 | 职责 |
 |---|---|
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
-| `src/town.js` | 领地：围墙+门楼（压顶石/垛口/四角小塔楼）、回廊、教士住宅、墓地、集市、**院内地面分级** |
-| `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root） |
+| `src/town.js` | 领地：围墙+门楼（压顶石/垛口/四角小塔楼）、回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**院内地面分级**；导出 `drainageInfo()` |
+| `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 四个检查器 + 取景页（shot.html / shoot.mjs）+ 排水演示（drainage.html） + 烘焙对照 + 导览录制 |
+| `tools/` | 四个检查器 + 取景页（shot.html / shoot.mjs）+ 排水演示（drainage.html）+ 烘焙对照 + 导览录制（record-tour.mjs）|
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
 
 - `buildTown()` 的 group 被 `buildCathedral()` 挂进 `root` → 自动进**第一人称碰撞/重建/释放**。
 - 领地材质标 `userData.noBake`（`bake.js` 跳过），网格标 `userData.buildSkip`（建造动画跳过）、`userData.town`（穿刺检查器跳过）；树额外标 `noFoundation`（不长地基）。
+- 排水构件另标 `userData.drain`（`gutter`/`pipe`/`basin`/`channel`/`culvert`/`soak`）——`check-rain.mjs` 的正向校验靠它。
 - 烘焙版本 `BAKE_VER=2`（`src/main.js`）。
 
 ## 检查器基线（当前全绿）
 
 ```bash
-node test/smoke.mjs                 # ~2430 网格，通过
+node test/smoke.mjs                 # 2471 网格，通过
 node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处
-node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7
-node tools/check-poke.mjs           # 0 处穿刺（按 userData.town 跳过领地）
-node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，无成片抖动
+node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7（不过 exit 1）
+node tools/check-poke.mjs           # 49 机位 0 处穿刺（按 userData.town 跳过领地）
+node tools/check-flicker.mjs        # 外观 0.00–0.18%、剖面 ≤0.32%，无成片抖动
 ```
 
-## 已知待办 / 未定
+## 状态：当前没有必须做的待办
 
-1. **`tour.mp4` 偏旧**：`docs/` 里 5 张无人引用的截图（west / interior / vault / section /
-   apse，连带 `overview.webp`）已删；现在只剩 `overview.png`（最新）与 `tour.mp4`
-   （领地之前拍的）。要更新导览片按 README「导览影片」一节重录。
+最近一轮把能想到的都收尾了（都已在 `main`）：
 
-已调过、暂无待办：前庭石板贴图（`pavingTexture()`）、回廊东西过道对称（`garth=16`）、
-回廊内檐沟 + 四角落水管 + 环院石砧明沟 + 暗管 + 渗井（`tools/drainage.html` 可看动画）、
-摊棚货台与布篷（前倾、柱头顶篷）、
-墙头垛口（齿 1.05 / 缺口 0.95 / 高 0.62 m）、后殿东侧土院铺满整个东端。
+- 前庭石板程序化贴图（`pavingTexture()`，世界坐标 UV）；回廊东西过道对称（`CLO.garth=16`）
+- 回廊整套排水：内檐沟 → 四角落水管 → 环院石砌明沟 → 暗管 → 渗井（终点，水渗入地下）。
+  构件带 `userData.drain` 标签，坐标由 `drainageInfo()` 导出
+- `tools/drainage.html` 排水演示页：动画水滴 + 「一滴水走完全程」追踪（小号青色彗星、镜头跟随）
+- `check-rain.mjs` 扫完漏点后做 **7 项排水通路正向校验**（屋面→檐沟→落水管→明沟→暗管→渗井）
+- 集市摊棚：货台改成真桌子、布篷改前倾且柱头顶篷；垛口（齿 1.05 / 缺口 0.95 / 高 0.62 m）
+- 后殿东侧土院铺满整个东端；`docs/` 里无人引用的孤儿图已删
+- 导览影片 `docs/tour.mp4` 重录（领地入镜，138 s）
+
+还想继续的话：垛口疏密、院内土院/草地比例的进一步口味调；或参考 `tools/drainage.html`
+给排水加更多真实细节（如明沟→沉淀井、雨水回用）。
 
 ## 关于看效果
 
@@ -67,7 +73,16 @@ node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，�
 - 不方便看图时仍可退到**像素采样**：`gl.readPixels` 读中心/网格点的 RGB 数字；
   或 `xdg-open docs/overview.png`。
 - 注：`tools/shot.html` 不做室内光照烘焙，室内对比仍以主站（`?view=…`）为准。
+- 录导览片：`tools/record-tour.mjs` **默认走 GPU**（`headless=new` + `--use-angle=vulkan`），
+  本机 NVIDIA MX230 约 15 fps、整片 4 分钟；SwiftShader 软件渲染只有 ~1 fps（加 `--swiftshader` 回退）。
+  抓帧前会等 `window.__baked`（室内烘焙完成），否则片中明暗会变。详细见 README「导览影片」。
+  注意：被工具超时杀掉时，headless Chrome 会残留空转占 CPU，要按临时 profile 清掉。
 
 ## 部署
 
-push 到 `main` → Cloudflare Pages 自动上线（Git 集成，无构建）。`tools/deploy-cf.sh` 是应急直传，一般不用。
+push 到 `main` → Cloudflare Pages 自动上线（Git 集成，无构建）。
+
+**单文件上限 25 MiB**：超过会让**整个部署失败**（连带别的小文件也不更新）。
+`docs/tour.mp4` 用 crf 24 编码（约 23 MB）刚好进线；改码率前先 `du -h` 看一眼。
+
+`tools/deploy-cf.sh` 是应急直传，一般不用（会绕过 git 历史）。
