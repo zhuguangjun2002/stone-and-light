@@ -19,9 +19,9 @@ const SX = 56, NX = -52, WZ = 78, EZ = -58;
 const WALL_H = 4.2, WALL_T = 0.85;
 
 // 回廊方位（南侧、中厅与耳堂之间），尺寸由外层方框与内院定。
-// x0 取 16.4：南侧飞扶壁的扶壁墩最远伸到 x≈15.9，回廊退到它之外，
-// 免得墩子从回廊屋面里穿出来。
-const CLO = { x0: 16.4, z0: 13.0, garth: 18.0, depth: 4.2 };
+// x0 取 18.5：扶壁墩最远伸到 x≈15.9，回廊与它之间留 ~2.6 m 的过道（类 slype），
+// 让 22 m 高的扶壁墩完整露出来；再往外（19.5）就会撞到南墙那排住宅（前脸 ~45.5）。
+const CLO = { x0: 18.5, z0: 13.0, garth: 18.0, depth: 4.2 };
 
 function townMaterials() {
   const M = (color, roughness = 0.95, extra = {}) => {
@@ -427,7 +427,7 @@ export function buildTown(labels = []) {
   root.add(buildMarket(mats, rnd));
   root.add(buildTrees(mats, rnd));
 
-  labels.push({ text: '回廊（修士的日常动线）', pos: [28, 7.5, 26], scope: 'out' });
+  labels.push({ text: '回廊（修士的日常动线）', pos: [31.7, 7.5, 26.2], scope: 'out' });
   labels.push({ text: '教堂领地围墙', pos: [0, 6.5, WZ], scope: 'out' });
   labels.push({ text: '北侧墓地', pos: [-32, 3, 0], scope: 'out' });
   labels.push({ text: '西前庭集市', pos: [13, 6, 66], scope: 'out' });
