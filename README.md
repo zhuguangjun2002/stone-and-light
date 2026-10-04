@@ -86,9 +86,13 @@ URL 参数：`?view=3&section=1&labels=1&build=0.42&time=0.95&panel=1&tour=1&pre
 ```bash
 python3 -m http.server 8123 &
 mkdir -p rec/frames && cd rec && npm i puppeteer-core
-node ../tools/record-tour.mjs
+node ../tools/record-tour.mjs     # 默认走 GPU（headless=new + ANGLE→Vulkan），约 4 分钟
 ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 21 tour.mp4
 ```
+
+抓帧脚本会先等 `window.__baked`（室内光照烘焙完成）再开始，否则片子中途明暗会变。
+默认用 GPU：本机实测 NVIDIA MX230（`--use-angle=vulkan`）约 15 fps、整片 4 分钟；
+而 SwiftShader 软件渲染只有约 1 fps、要一个多小时。无 GPU 或不稳时加 `--swiftshader` 回退。
 
 ## 测试与检查
 

@@ -345,6 +345,7 @@ function mountCathedral() {
   setAllDoors(WEATHER[weather].doors, true);
   buildDoorPlan();
   buildCollision();
+  window.__baked = false;   // 供 tools/record-tour.mjs 等：等烘焙完成再开始
   startBake();
 }
 
@@ -400,7 +401,7 @@ function stopBake() {
 async function startBake() {
   stopBake();
   for (const p of interiorLights) p.intensity = PT_RAW;   // 还没烘好之前先照亮
-  if (q.get('bake') === '0' || typeof Worker === 'undefined') return;
+  if (q.get('bake') === '0' || typeof Worker === 'undefined') { window.__baked = true; return; }
   const job = ++bakeJob, key = bakeKey();
   const el = bakeInfoEl();
   if (el) el.textContent = '室内光照：准备烘焙…';
@@ -412,6 +413,7 @@ async function startBake() {
     hit.idx.forEach((mi, k) => { colors[mi] = hit.colors[k]; });
     applyBake(colors);
     if (el) el.textContent = '室内光照：已烘焙（缓存）';
+    window.__baked = true;
     return;
   }
 
@@ -444,6 +446,7 @@ async function startBake() {
     } catch {
       if (el) el.textContent = '室内光照：这台设备跑不动，用替身光照';
       stopBake();
+      window.__baked = true;
       return;
     }
     bakeWorkers.push(w);
@@ -465,8 +468,9 @@ async function startBake() {
       const secs = ((performance.now() - t0) / 1000).toFixed(1);
       if (el) el.textContent = `室内光照：已烘焙（${secs} s）`;
       cachePut(key, { meshes: total, idx, colors: flat });
+      window.__baked = true;
     };
-    w.onerror = () => { if (el) el.textContent = '室内光照：烘焙失败（用替身光照）'; stopBake(); };
+    w.onerror = () => { if (el) el.textContent = '室内光照：烘焙失败（用替身光照）'; stopBake(); window.__baked = true; };
     w.postMessage({ params: { ...P }, slice: { k, n }, rays, prof });
   }
 }
