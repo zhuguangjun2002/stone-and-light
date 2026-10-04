@@ -183,7 +183,7 @@ const dotTex = (() => {
 const waterGeo = new THREE.BufferGeometry();
 waterGeo.setAttribute('position', new THREE.BufferAttribute(wpos, 3));
 const water = new THREE.Points(waterGeo,
-  new THREE.PointsMaterial({ map: dotTex, size: 0.55, sizeAttenuation: true, transparent: true, depthWrite: false, opacity: 1 }));
+  new THREE.PointsMaterial({ map: dotTex, size: 0.45, sizeAttenuation: true, transparent: true, depthWrite: false, opacity: 1 }));
 water.frustumCulled = false;
 scene.add(water);
 const _a = new THREE.Vector3();
@@ -217,13 +217,25 @@ const traceCaption = (s) => {
   for (let i = 0; i < traceFlow.lens.length; i++) { acc += traceFlow.lens[i]; if (s <= acc) return TRACE_CAP[i]; }
   return TRACE_CAP[TRACE_CAP.length - 1];
 };
-const tracer = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, depthTest: false, transparent: true, color: '#d6f2ff' }));
-tracer.scale.set(1.9, 1.9, 1);
-tracer.visible = false;
-scene.add(tracer);
+const tracer = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, depthTest: false, transparent: true, color: '#8ff0ff' }));
+const traceGroup = new THREE.Group();
+traceGroup.visible = false;
+scene.add(traceGroup);
+// 小头 + 一串渐隐的尾点（彗星）：方向一眼看得出，又不糊屏
+tracer.scale.set(0.8, 0.8, 1);
+traceGroup.add(tracer);
+const TAIL = 7, TAIL_DS = 0.32;
+const tail = [];
+for (let i = 1; i <= TAIL; i++) {
+  const f = 1 - i / (TAIL + 1);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, depthTest: false, transparent: true, color: '#4fd0ff', opacity: f }));
+  const s = 0.14 + 0.5 * f;
+  sp.scale.set(s, s, 1);
+  traceGroup.add(sp); tail.push(sp);
+}
 let tracing = false, traceS = 0, lastCap = '';
 const TFOLLOW = new THREE.Vector3(8.5, 5, 8.5);
-const _cam = new THREE.Vector3();
+const _cam = new THREE.Vector3(), _b = new THREE.Vector3();
 
 // ---------- 雨 ----------
 const RN = 1500;
@@ -307,7 +319,7 @@ $('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ?
 $('reset').onclick = () => { camera.position.set(...VIEW0.pos); controls.target.set(...VIEW0.tgt); };
 $('trace').onclick = () => {
   tracing = !tracing;
-  tracer.visible = tracing;
+  traceGroup.visible = tracing;
   $('trace').textContent = tracing ? '■ 停止追踪' : '▶ 看一滴水走完全程';
   $('cap').style.display = tracing ? 'block' : 'none';
   if (tracing) {
@@ -368,6 +380,10 @@ function frame() {
     const s = Math.min(traceS, traceFlow.len);
     traceFlow.at(s, _a);
     tracer.position.copy(_a);
+    for (let i = 0; i < tail.length; i++) {
+      traceFlow.at(Math.max(0, s - (i + 1) * TAIL_DS), _b);
+      tail[i].position.copy(_b);
+    }
     const cap = traceCaption(s);
     if (cap !== lastCap) { $('cap').innerHTML = cap; lastCap = cap; }
     // 镜头跟看这颗水滴
@@ -387,7 +403,7 @@ window.__view = (px, py, pz, tx, ty, tz) => { camera.position.set(px, py, pz); c
 window.__xray = (on) => { xray = !!on; const el = document.getElementById('xray'); if (el) el.checked = xray; applyXray(); };
 window.__traceAt = (s) => {
   if (!tracing) {
-    tracing = true; tracer.visible = true;
+    tracing = true; traceGroup.visible = true;
     $('trace').textContent = '■ 停止追踪'; $('cap').style.display = 'block';
     xray = true; $('xray').checked = true; applyXray(); controls.enabled = false;
   }
