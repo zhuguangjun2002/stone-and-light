@@ -49,6 +49,7 @@ function townMaterials() {
     trunk: M('#4a3a28'),
     water: new THREE.MeshStandardMaterial({ color: '#5f7f96', roughness: 0.18, metalness: 0.1, transparent: true, opacity: 0.85 }),
     win: M('#2b3a4a', 0.35, { metalness: 0.1 }),
+    lead: M('#61666d', 0.5, { metalness: 0.35 }),   // 檐沟 / 落水管
     gold: M('#c9a24a', 0.4, { metalness: 0.7 }),
     awning: [M('#8a3a34', 0.9), M('#3a5a6a', 0.9), M('#7a6a2a', 0.9)],
   };
@@ -164,6 +165,13 @@ function cloisterWalk(len, mats, yOff, seed) {
   roof.castShadow = roof.receiveShadow = true;
   roof.userData.buildSkip = true;
   g.add(roof);
+
+  // 内檐沟：屋面外高内低，水都往院子里走；真回廊沿内檐一圈水槽把水收住，
+  // 再由四角落水管引到院角雨水口（落水管见 buildCloister）。
+  const eaveY = H + 0.16 + yOff, gl = len + 0.7;
+  g.add(solid(new THREE.BoxGeometry(gl, 0.05, 0.36), mats.lead, 0, eaveY - 0.18, -0.5));       // 槽底
+  g.add(solid(new THREE.BoxGeometry(gl, 0.18, 0.05), mats.lead, 0, eaveY - 0.09, -0.70));      // 院侧翻边
+  g.add(solid(new THREE.BoxGeometry(gl, 0.18, 0.05), mats.lead, 0, eaveY - 0.09, -0.29));      // 墙侧翻边
   return g;
 }
 
@@ -214,6 +222,17 @@ function buildCloister(mats) {
   well.add(wroof);
   well.position.set(gcx, 0, gcz);
   g.add(well);
+
+  // 四角落水管 + 院角雨水口：内檐沟的水从这儿排下去，不是让雨直接泻到草地上。
+  // 水槽在院内偏 0.5 m，管就站在四条槽相交的四个点上。
+  const pipeG = new THREE.CylinderGeometry(0.09, 0.09, 4.4, 8);
+  const gullyG = new THREE.CylinderGeometry(0.32, 0.4, 0.16, 10);
+  for (const cx of [gx + 0.5, gx + garth - 0.5]) {
+    for (const cz of [gz + 0.5, gz + garth - 0.5]) {
+      g.add(solid(pipeG, mats.lead, cx, 2.2, cz));
+      g.add(solid(gullyG, mats.wallDark, cx, 0.08, cz));
+    }
+  }
   return g;
 }
 
