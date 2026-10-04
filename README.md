@@ -31,7 +31,9 @@ python3 -m http.server 8123
 
 **排水演示页**：`tools/drainage.html`（本地 <http://localhost:8123/tools/drainage.html>）。
 把回廊那套「屋面 → 内檐沟 → 落水管 → 明沟 → 暗管 → 渗井」的水路用动画水滴走一遁，
-可切透视墙体看屋里的管子、按阶段飞相机；关键坐标来自 `src/town.js` 的 `drainageInfo()`。
+可切透视墙体看屋里的管子、按阶段飞相机；点「看一滴水走完全程」时一颗高亮水滴沿
+整条路走一遍、镜头跟随、底部字幕报当前到哪一步。关键坐标来自 `src/town.js` 的
+`drainageInfo()`（与真实模型同一份数据）。
 
 ## 操作
 
