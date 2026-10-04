@@ -12,7 +12,7 @@
 
 import * as THREE from '../lib/three.module.js';
 import { wallWithOpenings, gableRoofGeometry, gableGeometry, makePinnacle } from './gothic.js';
-import { mulberry32 } from './materials.js';
+import { mulberry32, pavingTexture } from './materials.js';
 
 // 领地围墙的四至（世界坐标；+x 南、-x 北、+z 西、-z 东）
 const SX = 56, NX = -52, WZ = 78, EZ = -58;
@@ -20,8 +20,10 @@ const WALL_H = 4.2, WALL_T = 0.85;
 
 // 回廊方位（南侧、中厅与耳堂之间），尺寸由外层方框与内院定。
 // x0 取 18.5：扶壁墩最远伸到 x≈15.9，回廊与它之间留 ~2.6 m 的过道（类 slype），
-// 让 22 m 高的扶壁墩完整露出来；再往外（19.5）就会撞到南墙那排住宅（前脸 ~45.5）。
-const CLO = { x0: 18.5, z0: 13.0, garth: 18.0, depth: 4.2 };
+// 让 22 m 高的扶壁墩完整露出来。
+// garth 取 16（而非 18）：东缘落到 x = 42.9，与南墙那排住宅前脸（最浅时 x≈45.4）
+// 之间也宽出 ~2.5 m——回廊东西两侧的过道因此差不多宽，走起来不再挤。
+const CLO = { x0: 18.5, z0: 13.0, garth: 16.0, depth: 4.2 };
 
 function townMaterials() {
   const M = (color, roughness = 0.95, extra = {}) => {
@@ -29,6 +31,7 @@ function townMaterials() {
     m.userData.noBake = true;   // 室外：不参与室内光照烘焙
     return m;
   };
+  const paveTex = pavingTexture();   // 无 DOM 时为 null，退回纯色
   return {
     wall: M('#c4b9a1'),        // 领地围墙
     wallDark: M('#a2957c'),
@@ -39,7 +42,7 @@ function townMaterials() {
     wood: M('#4a3320', 0.8),
     grass: M('#6d7c4c', 1),
     path: M('#948e80', 1),
-    paving: M('#c4b690', 1),     // 前庭石板
+    paving: M(paveTex ? '#ffffff' : '#c4b690', 1, paveTex ? { map: paveTex } : {}),   // 前庭石板（贴图按世界坐标铺）
     earth: M('#8a7d62', 1),      // 压实土
     grave: M('#9a9384'),
     tree: M('#4d5f36', 1),
@@ -344,14 +347,22 @@ function makeTree(mats, s, rnd, x, z, yew = false) {
 
 // 院内地面分级：把原来一整块灰广场，拆成 前庭石板 / 草地 / 压实土 几档。
 // 每档用薄平面叠在广场上（y 各差几厘米，避免共面），材质 noBake、网格 buildSkip。
+// 铺地图的 UV 直接由世界 XZ 生成（局部平面绕 x 转 -90°：(x,y) → (x, -y)），
+// 于是不同尺寸的石板区缝距一致、相邻区块对得上。
 function buildGround(mats) {
   const g = new THREE.Group();
+  const PAVE_TILE = 6;   // 一张石板贴图 = 6 m × 6 m
   const patch = (mat, w, d, x, z, y) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, y, z);
     m.receiveShadow = true;
     m.userData.buildSkip = true;
+    if (mat.map) {
+      const uv = m.geometry.attributes.uv, pos = m.geometry.attributes.position, s = 1 / PAVE_TILE;
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + x) * s, (-pos.getY(i) + z) * s);
+      uv.needsUpdate = true;
+    }
     g.add(m);
   };
   // 西前庭石板（正门到西立面，集市所在）
@@ -427,7 +438,7 @@ export function buildTown(labels = []) {
   root.add(buildMarket(mats, rnd));
   root.add(buildTrees(mats, rnd));
 
-  labels.push({ text: '回廊（修士的日常动线）', pos: [31.7, 7.5, 26.2], scope: 'out' });
+  labels.push({ text: '回廊（修士的日常动线）', pos: [30.7, 7.5, 25.2], scope: 'out' });
   labels.push({ text: '教堂领地围墙', pos: [0, 6.5, WZ], scope: 'out' });
   labels.push({ text: '北侧墓地', pos: [-32, 3, 0], scope: 'out' });
   labels.push({ text: '西前庭集市', pos: [13, 6, 66], scope: 'out' });

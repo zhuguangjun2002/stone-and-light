@@ -13,8 +13,9 @@
 - 参数集中在 `src/params.js` 的 `P`，派生量在 `recomputeDerived()`：
   `aisleOut=13.2`、`outerX=14.2`（侧廊外墙外皮）、`naveZ0=6`、`naveZ1=48`、`choirZ1=-27`。
 - 领地四至（`src/town.js` 常量）：南 `SX=56`、北 `NX=-52`、西 `WZ=78`、东 `EZ=-58`；墙高 `WALL_H=4.2`。
-- 回廊（`CLO`）：`x0=18.5`、`z0=13`、内院 `garth=18`、敞廊进深 `depth=4.2`。
-  回廊与南侧扶壁墩（最远 x≈15.9）之间留 ~2.6 m 过道；回廊东缘距南墙住宅前脸（x≈45.5）仅 ~0.44 m。
+- 回廊（`CLO`）：`x0=18.5`、`z0=13`、内院 `garth=16`、敞廊进深 `depth=4.2`。
+  回廊西缘与南侧扶壁墩（最远 x≈15.9）之间留 ~2.6 m 过道；东缘（x=42.9）与南墙住宅前脸
+  （最浅 x≈45.4）之间也宽出 ~2.5 m——东西两侧的过道差不多宽。
 
 ## 代码地图
 
@@ -47,16 +48,25 @@ node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，�
 
 ## 已知待办 / 未定
 
-1. **回廊东侧偏紧**：回廊东缘距南墙住宅仅 0.44 m。若想两侧都宽松，可缩内院 `CLO.garth 18→16`，或把住宅进深 `8.4–10.2` 收到 `6–8`（`src/town.js` 的 `buildHouses`）。
-2. **前庭石板无纹理**：目前是纯色 `#c4b690`；可加 flagstone 程序化贴图。
-3. **媒体过期**：`docs/` 里其余截图与 `tour.mp4` 还是领地之前拍的，只有 `docs/overview.png` 是最新。
+1. ~~回廊东侧偏紧~~ **已改**：内院 `CLO.garth 18→16`，东缘落到 x=42.9，与南墙住宅
+   前脸（最浅 x≈45.4）之间宽出 ~2.5 m，与西侧扶壁墩过道（~2.6 m）差不多对称。
+2. ~~前庭石板无纹理~~ **已改**：`src/materials.js` 的 `pavingTexture()` 程序化石板贴图；
+   `buildGround` 里石板区按世界坐标铺 UV（一张 6 m 见方）。
+3. **媒体过期**：`docs/` 里 5 张截图（west / interior / vault / section / apse）**没有任何
+   地方引用**，且都是领地之前拍的；`tour.mp4` 也偏旧，只有 `docs/overview.png` 最新。
+   要么重拍并挂进 README 画廊，要么删掉这些孤儿文件。
 4. 墙头垛口疏密（当前齿 0.9 m / 间距 2.0 m）、院内土院/草地比例，可视口味调。
 
 ## 关于看效果
 
-- 当前会话的助手**读不了图片**（`read` 图片返回 "model does not support images"）。
-  验证视觉靠**像素采样**：用 puppeteer 加载 `tools/shot.html`（`preserveDrawingBuffer:true`），
-  `gl.readPixels` 读中心/网格点的 RGB 数字；或直接 `xdg-open docs/overview.png`。
+- 助手**能读图**（`read` 一张 PNG 会作为图片附件送进模型）。所以验证视觉走这个循环：
+  改代码 → `node tools/shoot.mjs …` 出 PNG → 直接 `read` 看 → 不满意再改。
+  `tools/shoot.mjs` 加载 `tools/shot.html`（`preserveDrawingBuffer:true`），
+  用 `window.__shot(px,py,pz,tx,ty,tz)` 与 `window.__sunAt(t)` 定点出图：
+  `node tools/shoot.mjs --view=1,2`，或 `--at=0,50,110,0,0,64`（可重复，写到 `/tmp/church-shot/`）。
+- 不方便看图时仍可退到**像素采样**：`gl.readPixels` 读中心/网格点的 RGB 数字；
+  或 `xdg-open docs/overview.png`。
+- 注：`tools/shot.html` 不做室内光照烘焙，室内对比仍以主站（`?view=…`）为准。
 
 ## 部署
 

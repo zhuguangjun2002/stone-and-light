@@ -56,6 +56,34 @@ function stoneTexture(base, joint, seed = 7) {
   });
 }
 
+// 石板铺地：错缝大石板 + 灰浆缝 + 明度噪声，一张贴图 = 6 m × 6 m 见方
+// （由 town.js 按世界坐标铺 UV，石板缝在世界尺度上处处等大）。
+function pavingTexture(base = '#c4b690', seed = 23) {
+  return canvasTexture(512, 512, (ctx, w, h) => {
+    const rnd = mulberry32(seed);
+    const hex = base.replace('#', '');
+    const R = parseInt(hex.slice(0, 2), 16), G = parseInt(hex.slice(2, 4), 16), B = parseInt(hex.slice(4, 6), 16);
+    const shade = (v) => `rgb(${Math.round(R * v)},${Math.round(G * v)},${Math.round(B * v)})`;
+    ctx.fillStyle = '#6f6757';                       // 灰浆缝底色
+    ctx.fillRect(0, 0, w, h);
+    const rows = 5, rh = h / rows, gap = 4;
+    for (let r = 0; r < rows; r++) {
+      let x = -((r % 2) * 70 + rnd() * 50);          // 错缝：奇数行错开
+      while (x < w) {
+        const bw = 72 + rnd() * 92;
+        ctx.fillStyle = shade(0.9 + rnd() * 0.2);    // 每块明度差
+        ctx.fillRect(x + gap, r * rh + gap, bw - gap * 2, rh - gap * 2);
+        x += bw;
+      }
+    }
+    for (let i = 0; i < 2600; i++) {                 // 石面颗粒与磨损
+      const v = rnd() * 30 - 15;
+      ctx.fillStyle = `rgba(${v > 0 ? 255 : 20},${v > 0 ? 252 : 18},${v > 0 ? 235 : 12},0.05)`;
+      ctx.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 4, 2 + rnd() * 4);
+    }
+  });
+}
+
 // 棋盘地砖：一张贴图 = FLOOR_TILES × FLOOR_TILES 格，边长 FLOOR_TILE 米（由 worldFloorUV 按世界坐标铺开）
 // 高度图 → 法线贴图。
 // 浅浮雕（bas-relief）本质就是一张高度图：石面被凿掉多少，光就怎么打上去。
@@ -166,4 +194,4 @@ export function makeMaterials() {
   return { stone, stoneLight, stoneDark, roof, dark, floor, door, ground, plaza, gold };
 }
 
-export { canvasTexture, hasDOM };
+export { canvasTexture, hasDOM, pavingTexture };
