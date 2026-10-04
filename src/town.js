@@ -169,9 +169,10 @@ function cloisterWalk(len, mats, yOff, seed) {
   // 内檐沟：屋面外高内低，水都往院子里走；真回廊沿内檐一圈水槽把水收住，
   // 再由四角落水管引到院角雨水口（落水管见 buildCloister）。
   const eaveY = H + 0.16 + yOff, gl = len + 0.7;
-  g.add(solid(new THREE.BoxGeometry(gl, 0.05, 0.36), mats.lead, 0, eaveY - 0.18, -0.5));       // 槽底
-  g.add(solid(new THREE.BoxGeometry(gl, 0.18, 0.05), mats.lead, 0, eaveY - 0.09, -0.70));      // 院侧翻边
-  g.add(solid(new THREE.BoxGeometry(gl, 0.18, 0.05), mats.lead, 0, eaveY - 0.09, -0.29));      // 墙侧翻边
+  const gut = (geo, y, z) => { const m = solid(geo, mats.lead, 0, y, z); m.userData.drain = 'gutter'; g.add(m); };
+  gut(new THREE.BoxGeometry(gl, 0.05, 0.36), eaveY - 0.18, -0.5);       // 槽底
+  gut(new THREE.BoxGeometry(gl, 0.18, 0.05), eaveY - 0.09, -0.70);      // 院侧翻边
+  gut(new THREE.BoxGeometry(gl, 0.18, 0.05), eaveY - 0.09, -0.29);      // 墙侧翻边
   return g;
 }
 
@@ -230,28 +231,30 @@ function buildCloister(mats) {
   const Z0 = gz + 0.5, Z1 = gz + garth - 0.5;
   const runZ = (Z1 + hw) - (Z0 - hw), runX = (X1 - hw) - (X0 + hw);
   const midX = (X0 + X1) / 2, midZ = (Z0 + Z1) / 2;
+  // 排水构件都打 userData.drain 标签，供 tools/check-rain.mjs 做“水位连通”正向校验
+  const dr = (tag, geo, mat, x, y, z) => { const m = solid(geo, mat, x, y, z); m.userData.drain = tag; g.add(m); };
   for (const cx of [X0, X1]) {                           // 西 / 东两条：沿 z
-    g.add(solid(new THREE.BoxGeometry(CHW, 0.08, runZ), mats.wallDark, cx, 0.1, midZ));
-    for (const s of [-1, 1]) g.add(solid(new THREE.BoxGeometry(kb, 0.18, runZ), mats.wall, cx + s * (hw - kb / 2 - 0.03), 0.13, midZ));
+    dr('channel', new THREE.BoxGeometry(CHW, 0.08, runZ), mats.wallDark, cx, 0.1, midZ);
+    for (const s of [-1, 1]) dr('channel', new THREE.BoxGeometry(kb, 0.18, runZ), mats.wall, cx + s * (hw - kb / 2 - 0.03), 0.13, midZ);
   }
   for (const cz of [Z0, Z1]) {                           // 北 / 南两条：沿 x
-    g.add(solid(new THREE.BoxGeometry(runX, 0.08, CHW), mats.wallDark, midX, 0.1, cz));
-    for (const s of [-1, 1]) g.add(solid(new THREE.BoxGeometry(runX, 0.18, kb), mats.wall, midX, 0.13, cz + s * (hw - kb / 2 - 0.03)));
+    dr('channel', new THREE.BoxGeometry(runX, 0.08, CHW), mats.wallDark, midX, 0.1, cz);
+    for (const s of [-1, 1]) dr('channel', new THREE.BoxGeometry(runX, 0.18, kb), mats.wall, midX, 0.13, cz + s * (hw - kb / 2 - 0.03));
   }
   // 四角落水管 + 沟里的小井（雨水先落井、再沿沟走）
   const pipeG = new THREE.CylinderGeometry(0.09, 0.09, 4.4, 8);
   const basinG = new THREE.CylinderGeometry(0.22, 0.26, 0.22, 10);
   for (const cx of [X0, X1]) for (const cz of [Z0, Z1]) {
-    g.add(solid(pipeG, mats.lead, cx, 2.2, cz));
-    g.add(solid(basinG, mats.lead, cx, 0.14, cz));
+    dr('pipe', pipeG, mats.lead, cx, 2.2, cz);
+    dr('basin', basinG, mats.lead, cx, 0.14, cz);
   }
 
   // 出水：四角的水都往东南角（X1,Z1）汇，接一根暗管（涵洞）穿过东翼地面，
   // 排到院外过道里的**渗井**——这就是这套排水的终点，水最后渗进地下。
   const soakX = 44.3;
-  g.add(solid(new THREE.BoxGeometry(soakX - X1, 0.4, 0.4), mats.lead, (X1 + soakX) / 2, -0.24, Z1));
-  g.add(solid(new THREE.CylinderGeometry(0.72, 0.8, 0.55, 12), mats.wallDark, soakX, -0.3, Z1));    // 井圈（埋在地下）
-  g.add(solid(new THREE.CylinderGeometry(0.6, 0.6, 0.12, 12), mats.lead, soakX, 0.0, Z1));           // 井篦（看得见）
+  dr('culvert', new THREE.BoxGeometry(soakX - X1, 0.4, 0.4), mats.lead, (X1 + soakX) / 2, -0.24, Z1);
+  dr('soak', new THREE.CylinderGeometry(0.72, 0.8, 0.55, 12), mats.wallDark, soakX, -0.3, Z1);    // 井圈（埋在地下）
+  dr('soak', new THREE.CylinderGeometry(0.6, 0.6, 0.12, 12), mats.lead, soakX, 0.0, Z1);           // 井篦（看得见）
   return g;
 }
 

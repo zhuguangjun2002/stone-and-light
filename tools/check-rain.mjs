@@ -8,6 +8,7 @@
 import * as THREE from '../lib/three.module.js';
 import fs from 'node:fs';
 import { buildCathedral } from '../src/cathedral.js';
+import { drainageInfo } from '../src/town.js';
 import { scanLeaks } from './rainscan.js';
 import { collectDoors, setDoorState } from '../src/doors.js';
 
@@ -78,4 +79,90 @@ if (arg('json')) {
     })),
   }, null, 1));
   console.log(`\n→ ${arg('json')}`);
+}
+
+// ---------- 正向校验：回廊排水通路 ----------
+// 上面查的是"哪里漏"（雨进了不该进的地方）；这一段反过来问：
+// "落在回廊屋面上的雨，是不是真有一套东西接住、送走、最后离开系统"。
+// 排水构件在 src/town.js 里打了 userData.drain 标签（gutter/pipe/basin/channel/culvert/soak）。
+function drainCheck(root) {
+  const info = drainageInfo();
+  const groups = {};
+  root.traverse((o) => { if (o.isMesh && o.userData.drain) (groups[o.userData.drain] ??= []).push(o); });
+  const boxes = (t) => (groups[t] || []).map((o) => new THREE.Box3().setFromObject(o));
+  const meshes = [];
+  root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const rc = new THREE.Raycaster();
+  const out = [];
+  const add = (name, ok, detail) => out.push({ name, ok: !!ok, detail });
+  const gapXZ = (box, p) => {
+    const dx = Math.max(box.min.x - p.x, 0, p.x - box.max.x);
+    const dz = Math.max(box.min.z - p.z, 0, p.z - box.max.z);
+    return Math.hypot(dx, dz);
+  };
+
+  // 1. 屋面 → 内檐沟：檐口正下方应该有檐沟
+  const gutterSet = new Set(groups.gutter || []);
+  const sides = [
+    ['西', (t) => [info.eaveIn.W, info.yIn + 0.05, t], 13.6, 36.8],
+    ['东', (t) => [info.eaveIn.E, info.yIn + 0.05, t], 13.6, 36.8],
+    ['北', (t) => [t, info.yIn + 0.05, info.eaveIn.N], 21.2, 40.2],
+    ['南', (t) => [t, info.yIn + 0.05, info.eaveIn.S], 21.2, 40.2],
+  ];
+  let nS = 0, nOk = 0;
+  const miss = [];
+  for (const [side, mk, a, b] of sides) for (let k = 0; k < 6; k++) {
+    const t = a + (b - a) * (k + 0.5) / 6;
+    rc.set(new THREE.Vector3(...mk(t)), new THREE.Vector3(0, -1, 0)); rc.far = 1.2;
+    const h = rc.intersectObjects(meshes, false)[0];
+    nS++;
+    if (h && gutterSet.has(h.object)) nOk++;
+    else miss.push(`${side}${t.toFixed(1)}→${h ? (h.object.userData.drain || h.object.geometry.type) : '空'}`);
+  }
+  add('屋面 → 内檐沟：檐口正下方都有檐沟', nOk === nS, `${nOk}/${nS} 个取点${miss.length ? '，落空 ' + miss.slice(0, 4).join(' ') : ''}`);
+
+  // 2. 檐沟 → 落水管：管顶落在檐沟上
+  const gb = boxes('gutter'), pb = boxes('pipe');
+  let maxGap = 0;
+  for (const p of pb) {
+    const c = p.getCenter(new THREE.Vector3());
+    maxGap = Math.max(maxGap, Math.min(...gb.map((g) => gapXZ(g, c))));
+  }
+  add('檐沟 → 落水管：四根管顶落在檐沟上', pb.length >= 4 && maxGap < 0.25, `${pb.length} 根管，管顶离檐沟最大 ${maxGap.toFixed(3)} m`);
+
+  // 3. 落水管 → 明沟：管底低于明沟面
+  const cb = boxes('channel');
+  const bottomMax = pb.length ? Math.max(...pb.map((p) => p.min.y)) : 999;
+  add('落水管 → 明沟：管底能落进沟', cb.length > 0 && bottomMax < info.yChan + 0.1, `管底最高 ${bottomMax.toFixed(2)} m，明沟面 ${info.yChan} m`);
+
+  // 4. 明沟 → 暗管：暗管起点在明沟出口角
+  const cul = boxes('culvert');
+  const outCorner = new THREE.Vector3(info.X1, 0, info.Z1);
+  const dCul = cul.length ? Math.min(...cul.map((c) => gapXZ(c, outCorner))) : 999;
+  add('明沟 → 暗管：暗管起点在明沟出口角', cul.length > 0 && dCul < 0.4, `离出口角 ${dCul.toFixed(3)} m`);
+
+  // 5. 暗管 → 渗井
+  const sk = boxes('soak');
+  const soakP = new THREE.Vector3(info.soak.x, 0, info.soak.z);
+  const dSoak = sk.length ? Math.min(...sk.map((s) => gapXZ(s, soakP))) : 999;
+  add('暗管 → 渗井：暗管终点通到渗井', sk.length > 0 && dSoak < 0.2, `离渗井 ${dSoak.toFixed(3)} m`);
+
+  // 6. 终点露天 + 暗管埋地
+  const grate = sk.length ? sk.reduce((a, b) => (b.max.y > a.max.y ? b : a)) : null;
+  rc.set(new THREE.Vector3(info.soak.x, (grate ? grate.max.y : 0) + 0.05, info.soak.z), new THREE.Vector3(0, 1, 0)); rc.far = 60;
+  const up = rc.intersectObjects(meshes, false)[0];
+  add('渗井露天（水从这里离开系统）', !up, up ? `正上方 60 m 内被 ${up.object.geometry.type} 挡住` : '正上方无遮挡');
+  const culTop = cul.length ? Math.max(...cul.map((c) => c.max.y)) : 999;
+  add('暗管埋在地下（看不见）', culTop < 0.02, `管顶 ${culTop.toFixed(2)} m（地面 0）`);
+
+  return out;
+}
+
+if (!arg('no-drain')) {
+  const checks = drainCheck(root);
+  console.log('—— 回廊排水通路（正向校验）——');
+  for (const c of checks) console.log(`  ${c.ok ? '✓' : '✗'} ${c.name}  —— ${c.detail}`);
+  const bad = checks.filter((c) => !c.ok).length;
+  console.log(bad ? `\n✗ 排水通路 ${bad} 处不通` : '\n✓ 排水通路完整：屋面雨全部可被收集并送走');
+  if (bad) process.exitCode = 1;
 }

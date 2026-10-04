@@ -41,7 +41,7 @@
 ```bash
 node test/smoke.mjs                 # ~2430 网格，通过
 node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处
-node tools/check-rain.mjs           # 0 处漏雨
+node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7
 node tools/check-poke.mjs           # 0 处穿刺（按 userData.town 跳过领地）
 node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.09%，无成片抖动
 ```
