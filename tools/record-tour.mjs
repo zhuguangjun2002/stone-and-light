@@ -1,20 +1,15 @@
 // 逐帧录制导览：连到 ?record=1 页面，固定步长推进 __tourStep(1/24)，逐帧截屏。
-// 默认走 GPU（headless=new + ANGLE→Vulkan，NVIDIA/Intel/AMD 都行）——软件渲染
-// （SwiftShader）实测 0.9 s/帧，GPU 只要 0.07 s/帧，快十几倍。
-// 无 GPU 或不稳时加 --swiftshader 回退到旧办法。
+// 默认走 GPU（实测 0.07 s/帧）；软件渲染 0.9 s/帧，快十几倍——无 GPU 或不稳时加
+// --swiftshader 回退。启动参数统一在 tools/chrome-args.mjs（抄一份就会漂）。
 import puppeteer from 'puppeteer-core';
+import { CHROME, chromeArgs, useGPU } from './chrome-args.mjs';
 import fs from 'node:fs';
 
 const FPS = 24;
-const soft = process.argv.includes('--swiftshader');
 const browser = await puppeteer.launch({
-  executablePath: '/usr/bin/google-chrome',
-  headless: soft ? true : 'new',
-  args: soft
-    ? ['--enable-unsafe-swiftshader', '--disable-gpu', '--use-gl=swiftshader',
-       '--window-size=1280,720', '--hide-scrollbars', '--mute-audio', '--no-sandbox']
-    : ['--ignore-gpu-blocklist', '--use-angle=vulkan',
-       '--window-size=1280,720', '--hide-scrollbars', '--mute-audio', '--no-sandbox'],
+  executablePath: CHROME,
+  headless: true,
+  args: chromeArgs(['--window-size=1280,720']),
 });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720 });
@@ -32,7 +27,7 @@ const gpu = await page.evaluate(() => {
   const e = gl && gl.getExtension('WEBGL_debug_renderer_info');
   return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : 'unknown';
 });
-console.log('渲染器:', gpu, soft ? '(软件渲染，慢)' : '(GPU)');
+console.log('渲染器:', gpu, useGPU() ? '(GPU)' : '(软件渲染，慢)');
 
 let i = 0;
 let done = false;

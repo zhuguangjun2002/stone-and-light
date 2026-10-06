@@ -1,0 +1,67 @@
+# 修道院酿酒调研（酿酒坊大院的参照）
+
+> 2026-10-06，规划 `src/town.js` 的「修道院酿酒」扩建之前的背景调研。场景里的名字、
+> 院子与管线对不上真实原型时，以本页为依据。
+
+## 我们这座大教堂 + 领地在教会体系里是什么
+
+| 称呼 | 是什么 | 和我们场景的关系 |
+|---|---|---|
+| cathedral（主教座堂） | 主教的所在地建筑 | 场景主体：拉丁十字大教堂 |
+| parish church（堂区教堂） | 某堂区的普通教堂 | — |
+| monastery（修道院） | 修士/修女依规则共同生活的院落（本笃会 Rule 等） | 我们新增的**酿酒坊大院**就属于这类院落的一角 |
+| abbey（大修道院） | 有 abbot 领衔、自治的修道院 | 我们场景里没有这层行政等级，但大院格局相似 |
+| cloister（回廊） / garth（内苑） | 修道院的核心闭合院落 | 已存在的 `CLO` 回廊 |
+| canon house（教士住宅） | 修道院成员住的房子 | 院南 / 院东两排 |
+| Trappist（特拉普修士） | Cistercian 严守派的一个分支，以酿啤酒闻名 | 下文重点 |
+
+一句话：我们的场景是**主教座堂的领地**（cathedral close），新加的那块就是
+历史上这类「服务院落」（service court）里常见的**制酒工事**所在这一格。
+
+## 「修道院啤酒」的代表性案例
+
+### 1. Weihenstephan（巴伐利亚，本笃会，世界现存最古啤酒厂）
+
+- 725 年，科尔宾尼安（St. Corbinian）与十二名同伴在 Freising 的 Nährberg 山建立本笃会修道院（彼时宗教在酿酒几乎是家常便饭）。
+- 768 年，有记载写当地的酒花园向修道院缴十一税——当时这里大概率已经在酿酒。
+- **1040 年**，阿博特 Arnold 从 Freising 领得酿酒与售酒特许，世界现存最古的啤酒厂
+  （这后来才成为官宣年份，文档本身的考据有微妙之处，见 Wikipedia）。
+- 1516 年巴伐利亚纯净州法（Reinheitsgebot）后成名，一直是德意志的"母啤酒厂"。
+- 1803 年德国世俗化运动中修道院被解散，酒厂随之转归巴伐利亚国家，至今仍营。
+
+### 2. Belgium / Netherlands 等的 Trappist（特拉普）
+
+真正把「修道院酿啤酒」做成标签的是 Trappist —— Cistercian 的严守分支：
+
+- **Belgium 六家**：Orval、Chimay、Rochefort、Westmalle、Westvleteren、Achel（Achel 于 2021 年失去认证，因不再由修士在院内督造；2023 年被出售，即不再是 Trappist）。
+- **国际外围**：荷兰 La Trappe（Koningshoeven）、意大利 Tre Fontane、英国 Tynt Meadow、奥地利 Engelszell（2023 年也解散了）、法国 Mont des Cats（在 Chimay 代酿）、Cardeña（西班牙，异地灌装）等，加起来十厂获认证。
+- **ATP（Authentic Trappist Product）三条硬标准**（国际 Trappist 协会 ITA，成立于 1998 年，专管这个）：
+  1. **在修道院围墙内（或紧邻区域）制作** —— 所以大院必须是闭合的；
+  2. **由修士/修女直接生产，或在其监督下进行** —— 修士是老板也是工人；
+  3. **收益回到修道院维持与慈善** —— 啤酒厂是经济活动、但不是赚大钱的目的，
+     「赚毛利」与「养活院子、赈济邻里」共存。
+- 经营上强调「修道院生活第一，啤酒厂第二」。Trappist 社区视它为侍奉/劳动的方式。
+- 每家用**独有酵母**（如 Rochefort 酵母、Orval 酵母），工艺即品牌。
+
+## 为什么我们场景里的酒坊放在这里
+
+- 我们大院（`BREW` 06 座建筑 + 服务巷 + 菜园药圃）遵循 ATP 的「**院内闭合生产区**」：
+  从麦芽到出售一条从生产、冷却、窖藏到巷内酒肆一条龙，顺应「修士自己生产」的概念。
+- 名牌（修士造的）是/特拉普标准里的直接生产人——我们用「流水线式六座」和「酒肆」来
+  暗示教士住持的日常经济活动（相当于 Trappist 的「次级工作」）。
+- 视觉上五种颜色的屋面砖（粮仓/冷却/酒肆的板岩灰 + 麦芽楼泥塔红 + 烘房深灰等）
+  与主干道的修道院一致、但屋顶明确区分，可以从远处区分「修院 06 座制酒工事」。
+
+## 后续可放的空间（未做）
+
+- 真实修道院里啤酒厂通常还自带：麦香温床（kiln 底）、储水塔、窑前的糖化槽等——
+  物件可以作为 `figure.js`/`solid` 的小件加入酿酒坊外院。
+- 若某天要加「abbey beer（商业阿比酒）」作为反例（不是修士造的酒），可以在院子外面的
+  集市摊点里做一块虚设的 Abdij 货台作为对照。
+
+## 引用
+
+- Weihenstephan 官网历史：https://www.weihenstephaner.com/our-brewery/history
+- Wikipedia, "Weihenstephaner" / "Weihenstephan Abbey"
+- Wikipedia, "Trappist beer"：https://en.wikipedia.org/wiki/Trappist_beer
+- International Trappist Association, ATP 标签说明：https://www.trappist.be/en/about-ita/atp-label/
