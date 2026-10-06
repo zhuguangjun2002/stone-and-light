@@ -735,18 +735,40 @@ function setBuildActive(on) {
   applyBuild();
 }
 
-// ---------- 第一人称行走 ----------
-const walk = { active: false, yaw: 0, pitch: 0, keys: new Set() };
+// ---------- 第一人称/第三人称行走 ----------
+const walk = { active: false, tp: false, yaw: 0, pitch: 0, keys: new Set() };
+const walkPos = { x: 0, z: 0 };
 const _fwd = new THREE.Vector3();
+
+// 第三人称用的真人大小（约 1.7 m）替身：走在房子之间，判断间距/过道是否够排得下人。
+const person = (() => {
+  const g = new THREE.Group();
+  const robe = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.27, 1.36, 10),
+    new THREE.MeshStandardMaterial({ color: '#6f5f4e', roughness: 0.92 }));
+  robe.position.y = 0.75;
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 12, 10),
+    new THREE.MeshStandardMaterial({ color: '#c89f80', roughness: 0.65 }));
+  head.position.y = 1.55;
+  g.add(robe, head);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.visible = false;
+  return g;
+})();
+scene.add(person);
+
 function setWalk(on) {
   walk.active = on;
+  walk.tp = false;
+  walkPos.x = camera.position.x; walkPos.z = camera.position.z;
   controls.enabled = !on;
+  person.visible = false;
   if (on) {
     camera.getWorldDirection(_fwd);
     walk.yaw = Math.atan2(-_fwd.x, -_fwd.z);
     walk.pitch = Math.asin(THREE.MathUtils.clamp(_fwd.y, -1, 1));
-    camera.position.y = 1.7;
-    toast('行走模式：点击画面锁定鼠标 · WASD 移动 · Shift 加速 · F 返回环视');
+    toast('行走模式：点击画面锁定鼠标 · WASD 移动 · Shift 加速 · V 第三人称 · F 返回环视');
   } else {
     document.exitPointerLock?.();
     camera.getWorldDirection(_fwd);
@@ -754,9 +776,13 @@ function setWalk(on) {
     toast('环视模式');
   }
 }
+function setWalkTP(on) {
+  walk.tp = on;
+  person.visible = on;
+  toast(on ? '第三人称：相机跟随替身 · V 切回第一人称' : '第一人称');
+}
 function updateWalk(dt) {
   if (!walk.active) return;
-  camera.quaternion.setFromEuler(new THREE.Euler(walk.pitch, walk.yaw, 0, 'YXZ'));
   const speed = (walk.keys.has('ShiftLeft') || walk.keys.has('ShiftRight')) ? 16 : 5.5;
   const fx = -Math.sin(walk.yaw), fz = -Math.cos(walk.yaw);
   const rx = Math.cos(walk.yaw), rz = -Math.sin(walk.yaw);
@@ -768,14 +794,23 @@ function updateWalk(dt) {
   const len = Math.hypot(mx, mz);
   if (len > 0) {
     const sx = (mx / len) * speed * dt, sz = (mz / len) * speed * dt;
-    const { x, z } = camera.position;
-    if (canStep(x, z, sx, sz)) { camera.position.x += sx; camera.position.z += sz; }
+    const { x, z } = walkPos;
+    if (canStep(x, z, sx, sz)) { walkPos.x += sx; walkPos.z += sz; }
     else {                                        // 撞上了就分轴各试一次：贴着墙滑
-      if (canStep(x, z, sx, 0)) camera.position.x += sx;
-      if (canStep(camera.position.x, z, 0, sz)) camera.position.z += sz;
+      if (canStep(x, z, sx, 0)) walkPos.x += sx;
+      if (canStep(walkPos.x, z, 0, sz)) walkPos.z += sz;
     }
   }
-  camera.position.y = 1.7;
+  person.position.set(walkPos.x, 0, walkPos.z);
+  person.rotation.y = walk.yaw;
+  if (walk.tp) {                                  // 第三人称：相机在替身后上方，按 pitch 微调高度
+    const d = 4.2;
+    camera.position.set(walkPos.x - fx * d, 2.0 - walk.pitch * 1.1, walkPos.z - fz * d);
+    camera.lookAt(walkPos.x, 1.5, walkPos.z);
+  } else {                                        // 第一人称：相机即替身的眼睛
+    camera.quaternion.setFromEuler(new THREE.Euler(walk.pitch, walk.yaw, 0, 'YXZ'));
+    camera.position.set(walkPos.x, 1.7, walkPos.z);
+  }
 }
 renderer.domElement.addEventListener('click', () => {
   if (walk.active && document.pointerLockElement !== renderer.domElement) {
@@ -788,6 +823,12 @@ addEventListener('mousemove', (e) => {
     walk.pitch = THREE.MathUtils.clamp(walk.pitch - e.movementY * 0.0022, -1.45, 1.45);
   }
 });
+
+// 无头回归脚本用的入口（与之前的 window.__baked / window.__tourStep 同级）
+window.__setWalk = setWalk;
+window.__setWalkTP = setWalkTP;
+window.__walk = walk;
+window.__walkPos = walkPos;
 
 // ---------- 电影导览 ----------
 let RECORD = false;   // ?record=1：确定性逐帧步进，供无头浏览器抓帧成片
@@ -1046,6 +1087,10 @@ function doAction(name) {
     case 'tour': setTour(!tour.active); break;
     case 'build': setBuildActive(!build.active); break;
     case 'walk': setWalk(!walk.active); break;
+    case 'tpView':
+      if (walk.active) setWalkTP(!walk.tp);
+      else toast('先按 F 进入行走模式，再按 V 切第三人称');
+      break;
     case 'panel': setPanel(document.getElementById('panel').classList.contains('hidden')); break;
     case 'section':
       sectionIdx = (sectionIdx + 1) % SECTIONS.length;
@@ -1089,7 +1134,7 @@ function doAction(name) {
 const CODE_ACTIONS = {
   KeyT: 'tour', KeyB: 'build', KeyF: 'walk', KeyP: 'panel',
   KeyC: 'section', KeyL: 'labels', KeyG: 'bell', KeyO: 'organ', KeyM: 'mute', KeyH: 'help',
-  KeyK: 'doors', KeyE: 'nearDoor', Minus: 'uiSmaller', Equal: 'uiBigger',
+  KeyK: 'doors', KeyE: 'nearDoor', KeyV: 'tpView', Minus: 'uiSmaller', Equal: 'uiBigger',
 };
 addEventListener('keydown', (e) => {
   audio.ensure();
