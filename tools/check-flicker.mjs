@@ -8,6 +8,7 @@
 // 用法：node tools/check-flicker.mjs [--views=1,3,7] [--sections=0,1,2] [--size=640x400]
 //       [--pos=x,y,z --tgt=x,y,z] [--sun=0.42] [--out=/tmp/flicker] [--port=8123]
 import puppeteer from 'puppeteer-core';
+import { CHROME, chromeArgs } from './chrome-args.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -52,11 +53,12 @@ const server = http.createServer((req, res) => {
 }).listen(PORT);
 
 fs.mkdirSync(OUT, { recursive: true });
+// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader（基线跨机器可复现），
+// CHROME_GPU=1 改走本机显卡（快约 25%，但基线会变，只用于看图）。
 const browser = await puppeteer.launch({
-  executablePath: process.env.CHROME ?? '/usr/bin/google-chrome',
+  executablePath: CHROME,
   headless: true,
-  args: ['--enable-unsafe-swiftshader', '--disable-gpu', '--use-gl=swiftshader',
-    '--hide-scrollbars', '--mute-audio', '--no-sandbox'],
+  args: chromeArgs(),
 });
 const page = await browser.newPage();
 await page.setViewport({ width: W, height: H });

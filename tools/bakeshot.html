@@ -27,10 +27,16 @@ scene.fog = new THREE.FogExp2('#d8d4c6', 0.0016);
 const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85);
 const sun = new THREE.DirectionalLight('#fff1da', 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
-sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
-sun.shadow.camera.near = 20; sun.shadow.camera.far = 350; sun.shadow.bias = -0.0006;
+// 阴影视锥与 main.js 同一份（params.js 的 P.shadow）：这页是烘焙对照的取景页，
+// 影子必须和主场景是同一套，否则"对照"就对照到另一套光上了。
+{
+  const S = P.shadow;
+  sun.shadow.mapSize.set(S.map, S.map);
+  sun.shadow.camera.left = -S.H; sun.shadow.camera.right = S.H;
+  sun.shadow.camera.top = S.top; sun.shadow.camera.bottom = S.bottom;
+  sun.shadow.camera.near = S.near; sun.shadow.camera.far = S.far;
+  sun.shadow.bias = S.bias;
+}
 scene.add(hemi, sun, sun.target);
 const pts = [];
 for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {

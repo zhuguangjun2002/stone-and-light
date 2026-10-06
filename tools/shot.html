@@ -5,6 +5,7 @@
 import * as THREE from '../lib/three.module.js';
 import { buildCathedral } from '../src/cathedral.js';
 import { canvasTexture, mulberry32 } from '../src/materials.js';
+import { P, sunPos } from '../src/params.js';
 const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 r.setSize(1280, 720); r.setPixelRatio(1); r.shadowMap.enabled = true;
 r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping;
@@ -12,10 +13,16 @@ document.body.appendChild(r.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#cbd6e6');
 const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff1da', 2.4); sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
-sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
-sun.shadow.camera.near = 20; sun.shadow.camera.far = 350; sun.shadow.bias = -0.0006;
+// 阴影视锥与 main.js 同一份（params.js 的 P.shadow）——这页是无头截图页，必须和主场景
+// 看到同一套影子，否则"截图核对"会核对到另一套光上。校验：node tools/check-shadow.mjs
+{
+  const S = P.shadow;
+  sun.shadow.mapSize.set(S.map, S.map);
+  sun.shadow.camera.left = -S.H; sun.shadow.camera.right = S.H;
+  sun.shadow.camera.top = S.top; sun.shadow.camera.bottom = S.bottom;
+  sun.shadow.camera.near = S.near; sun.shadow.camera.far = S.far;
+  sun.shadow.bias = S.bias;
+}
 scene.add(sun, sun.target);
 for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
   const p = new THREE.PointLight('#ffd9a0', 220, 70, 2); p.position.set(x, y, z); scene.add(p);
@@ -80,9 +87,9 @@ const builtRoot = buildCathedral().root;
 scene.add(builtRoot);
 scene.add(addFoundations(builtRoot));
 const cam = new THREE.PerspectiveCamera(55, 1280 / 720, 0.5, 2000);
-window.__sunAt = (t) => {                       // 与 main.js 的日照曲线一致
-  const s = Math.sin(Math.PI * t), az = Math.PI * t, el = (7 + 56 * s) * Math.PI / 180, R = 170;
-  sun.position.set(R * Math.cos(el) * Math.sin(az), R * Math.sin(el), -R * Math.cos(el) * Math.cos(az));
+window.__sunAt = (t) => {                       // 轨迹在 params.js，与 main.js / check-shadow 同一份
+  const s = Math.sin(Math.PI * t);
+  sunPos(t, sun.position);
   sun.intensity = 1.0 + 1.5 * s; hemi.intensity = 0.3 + 0.6 * s;
 };
 window.__shot = (px, py, pz, tx, ty, tz) => { cam.position.set(px, py, pz); cam.lookAt(tx, ty, tz); r.render(scene, cam); };

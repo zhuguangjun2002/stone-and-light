@@ -7,6 +7,7 @@
 import * as THREE from '../lib/three.module.js';
 import { buildCathedral } from '../src/cathedral.js';
 import { collectDoors, setDoorState } from '../src/doors.js';
+import { P } from '../src/params.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
@@ -22,10 +23,16 @@ scene.fog = new THREE.FogExp2('#d8d4c6', 0.0016);
 const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85);
 const sun = new THREE.DirectionalLight('#fff1da', 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
-sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
-sun.shadow.camera.near = 20; sun.shadow.camera.far = 350; sun.shadow.bias = -0.0006;
+// 阴影视锥与 main.js 同一份（params.js 的 P.shadow）：闪烁检查器查的就是这套影子，
+// 配置一改基线就得重测。校验：node tools/check-shadow.mjs
+{
+  const S = P.shadow;
+  sun.shadow.mapSize.set(S.map, S.map);
+  sun.shadow.camera.left = -S.H; sun.shadow.camera.right = S.H;
+  sun.shadow.camera.top = S.top; sun.shadow.camera.bottom = S.bottom;
+  sun.shadow.camera.near = S.near; sun.shadow.camera.far = S.far;
+  sun.shadow.bias = S.bias;
+}
 scene.add(hemi, sun, sun.target);
 for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
   const p = new THREE.PointLight('#ffd9a0', 220, 70, 2); p.position.set(x, y, z); scene.add(p);

@@ -3,6 +3,7 @@
 // 大面包围的小岛，再打两条射线比深度：小岛与外皮几乎等距 = 真的插在里面。
 // 用法：node tools/check-poke.mjs [--size=900x640] [--r=55,90] [--top=20] [--port=8201]
 import puppeteer from 'puppeteer-core';
+import { CHROME, chromeArgs } from './chrome-args.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,10 +45,11 @@ const server = http.createServer((req, res) => {
   });
 }).listen(PORT);
 
+// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader，CHROME_GPU=1 走本机显卡。
 const browser = await puppeteer.launch({
-  executablePath: process.env.CHROME ?? '/usr/bin/google-chrome',
+  executablePath: CHROME,
   headless: true,
-  args: ['--enable-unsafe-swiftshader', '--disable-gpu', '--use-gl=swiftshader', '--no-sandbox', '--hide-scrollbars'],
+  args: chromeArgs(),
 });
 const page = await browser.newPage();
 await page.setViewport({ width: W, height: H });

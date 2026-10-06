@@ -1,6 +1,7 @@
 // 烘焙前后的 A/B 对照：两套镶玻方案 × 两个机位 × 烘焙前后，共八张图。
 // 用法：node tools/bakeshot.mjs <输出目录>
 import puppeteer from 'puppeteer-core';
+import { CHROME, chromeArgs } from './chrome-args.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,8 +17,9 @@ const server = http.createServer((req, res) => {
     res.end(b);
   });
 }).listen(8202);
-const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, protocolTimeout: 1200000,
-  args: ['--enable-unsafe-swiftshader','--disable-gpu','--no-sandbox','--hide-scrollbars'] });
+// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader，CHROME_GPU=1 走本机显卡。
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, protocolTimeout: 1200000,
+  args: chromeArgs() });
 const CAMS = [
   { name: 'nave', pos: [-4.5, 5.5, 31], tgt: [6.5, 16, 22], sun: 0.35 },
   { name: 'axis', pos: [0, 6.5, 42], tgt: [0, 15, 12], sun: 0.35 },

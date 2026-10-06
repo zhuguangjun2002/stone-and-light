@@ -110,7 +110,7 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 24 t
 | 查什么 | 工具 | 当前 |
 |---|---|---|
 | 共面重叠（z-fighting） | `check-zfight.mjs` | 严格共面 ≥0.2 m² **0 处** |
-| 画面抖动（真渲染微扰） | `check-flicker.mjs` | 完整外观 0.01–0.18%，剖面最高 0.32%，**无成片抖动** |
+| 画面抖动（真渲染微扰） | `check-flicker.mjs` | 完整外观 0.02–0.18%，剖面最高 0.32%，**无成片抖动** |
 | 下雨漏水 | `check-rain.mjs` | 垂直雨与八个风向 **0 处**（门开着时会照实报出来） |
 | 构件穿出外皮 | `check-poke.mjs` | 49 个机位 **0 处** |
 | 酿酒坊水路通不通 | `check-brew.mjs` | **7/7**（屋面雨可被收集并送走） |
@@ -124,8 +124,22 @@ node tools/check-rain.mjs    # 下雨天哪里漏：撒一场雨，找出雨能�
 node tools/check-poke.mjs    # 查"露出来的部分"：构件的一角戳穿了屋面/墙面（见下）
 node tools/check-brew.mjs    # 酿酒坊大院的水路连通：檐沟/落水管/明沟/暗管/渗井（见下）
 node tools/check-shadow.mjs  # 阴影正交相机的视锥够不够罩住整片领地（见下）
+CHROME_GPU=1 node tools/check-flicker.mjs   # 换本机显卡跑：快 4.6 倍，但基线会变（见下）
 # test/audio-render.html     # 浏览器打开：离线渲染音频，测量钟声/管风琴的峰值与 RMS
 ```
+
+> **渲染后端只留一份**（`tools/chrome-args.mjs`，`bakeshot`/`check-flicker`/`check-poke`/
+> `shoot` 共用，抄一份就会漂）。默认 **SwiftShader** 软件渲染——跨机器、跨驱动给出同一套
+> 像素，上面记的基线才对得上。本机有显卡时 `CHROME_GPU=1` 改走真 GPU：
+>
+> | 后端 | check-flicker 全扫 | 逐帧（1280×720，含 4096 阴影通道） |
+> |---|---|---|
+> | SwiftShader（默认） | 24.6 s | 45 ms |
+> | **MX230** `CHROME_GPU=1` | **5.3 s（4.6×）** | 35 ms |
+> | Intel UHD 620（强制核显） | — | 56 ms（**比软渲还慢**，别选） |
+>
+> 真 GPU 的像素与软渲略有出入（合计抖动 3547 vs 3501），**只用于看图/录片**，
+> 别拿它去和记录的基线比。
 
 ### z-fighting 检查器
 
@@ -148,8 +162,8 @@ TOP=40 node tools/check-zfight.mjs 0.004 0.2           # 只看严格共面的�
 ### 闪烁检查器（动态，会定位到具体网格）
 
 静态检查器只认"共面重叠"这一种成因，管不了曲面相切、也管不了剖面。
-`tools/check-flicker.mjs` 换一条路：用 headless Chrome（SwiftShader 软渲染，不需要
-显卡）真渲染一帧，再渲染几帧**微扰帧**，逐像素比对——同一个像素两帧不一样，就说明
+`tools/check-flicker.mjs` 换一条路：用 headless Chrome（默认 SwiftShader 软渲染，不需要
+显卡；要快就加 `CHROME_GPU=1` 走本机显卡，见本节开头）真渲染一帧，再渲染几帧**微扰帧**，逐像素比对——同一个像素两帧不一样，就说明
 它的归属是靠浮点误差决定的，也就是屏幕上会闪的地方。三种微扰各自对应一种成因：
 
 | 微扰 | 屏幕上动了什么 | 变了说明 |
@@ -172,8 +186,8 @@ node tools/check-flicker.mjs --pos=... --probe=255,345        # 只问：这个�
 依赖 `npm i puppeteer-core` 与本机的 `/usr/bin/google-chrome`（可用 `CHROME=` 覆盖）。
 取景页是 `tools/flicker.html`，光照、雾、地面、剖面都与 `main.js` 一致。
 
-当前基线（18 个机位 × 800×500 全扫）：完整外观下 **0.01%–0.17%**，两档剖面下最高
-**0.32%**（横剖 + 中厅机位）；剩下的都是柱身与附柱相切处的一条条细线（构件真实相交，
+当前基线（18 个机位 × 800×500 全扫，SwiftShader）：完整外观下 **0.02%–0.18%**，两档剖面下最高
+**0.32%**（横剖 + 中厅机位），合计抖动 **3501 px**；剩下的都是柱身与附柱相切处的一条条细线（构件真实相交，
 见上面那条长尾）——**没有成片的抖动**。
 
 ### 漏雨检查器（找"外面能看进来"的洞）

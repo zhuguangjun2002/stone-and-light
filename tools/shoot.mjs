@@ -5,6 +5,7 @@
 //   node tools/shoot.mjs --at=... --at=... --sun=0.7      # 可重复；--out 指定输出前缀
 // 出图默认写到 /tmp/church-shot/。
 import puppeteer from 'puppeteer-core';
+import { CHROME, chromeArgs } from './chrome-args.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,11 +54,11 @@ const server = http.createServer((req, res) => {
 }).listen(PORT);
 
 fs.mkdirSync(OUT, { recursive: true });
+// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader，CHROME_GPU=1 走本机显卡。
 const browser = await puppeteer.launch({
-  executablePath: process.env.CHROME ?? '/usr/bin/google-chrome',
+  executablePath: CHROME,
   headless: true,
-  args: ['--enable-unsafe-swiftshader', '--disable-gpu', '--use-gl=swiftshader',
-    '--hide-scrollbars', '--mute-audio', '--no-sandbox'],
+  args: chromeArgs(),
 });
 const page = await browser.newPage();
 await page.setViewport({ width: W, height: H });
