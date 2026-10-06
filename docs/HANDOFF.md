@@ -12,7 +12,9 @@
 - y 向上；中厅轴线沿 **z**，西立面在 **+z**，后殿在 **−z**；**+x 南**、−x 北。
 - 参数集中在 `src/params.js` 的 `P`，派生量在 `recomputeDerived()`：
   `aisleOut=13.2`、`outerX=14.2`（侧廊外墙外皮）、`naveZ0=6`、`naveZ1=48`、`choirZ1=-27`。
-- 领地四至（`src/town.js` 常量）：南 `SX=56`、北 `NX=-52`、西 `WZ=78`、东 `EZ=-58`；墙高 `WALL_H=4.2`。
+- 领地四至（`src/town.js` 常量）：**新围墙** 南 `SX2=76`、北 `NX2=-64`、西 `WZ=78`、东 `EZ2=-78`；
+  **原围墙**（`SX=56`/`NX=-52`/`EZ=-58`）降级成院内庭墙；墙高 `WALL_H=4.2`。
+- 服务巷 `LANE`（x 57.5–61.5 / z −40–76）贴着旧南墙与酒坊；酿酒坊大院六座建筑见 `BREW`。
 - 回廊（`CLO`）：`x0=18.5`、`z0=13`、内院 `garth=16`、敞廊进深 `depth=4.2`。
   回廊西缘与南侧扶壁墩（最远 x≈15.9）之间留 ~2.6 m 过道；东缘（x=42.9）与南墙住宅前脸
   （最浅 x≈45.4）之间也宽出 ~2.5 m——东西两侧的过道差不多宽。
@@ -22,34 +24,60 @@
 | 文件 | 职责 |
 |---|---|
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
-| `src/town.js` | 领地：围墙+门楼（压顶石/垛口/四角小塔楼）、回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**院内地面分级**；导出 `drainageInfo()` |
+| `src/town.js` | 领地：双圈围墙+门楼（压顶石/垛口/八角小塔楼）、回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 六建筑 + 服务巷 + 院子排水 `buildBreweryDrain`）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
 | `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 四个检查器 + 取景页（shot.html / shoot.mjs）+ 排水演示（drainage.html）+ 烘焙对照 + 导览录制（record-tour.mjs）|
+| `tools/` | 六个检查器（含 `check-brew.mjs` / `check-shadow.mjs`）+ 取景页（shot.html / shoot.mjs）+ 两个水路演示（drainage.html / **brewery.html**）+ 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）|
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
 
 - `buildTown()` 的 group 被 `buildCathedral()` 挂进 `root` → 自动进**第一人称碰撞/重建/释放**。
 - 领地材质标 `userData.noBake`（`bake.js` 跳过），网格标 `userData.buildSkip`（建造动画跳过）、`userData.town`（穿刺检查器跳过）；树额外标 `noFoundation`（不长地基）。
-- 排水构件另标 `userData.drain`（`gutter`/`pipe`/`basin`/`channel`/`culvert`/`soak`）——`check-rain.mjs` 的正向校验靠它。
+- 回廊排水构件标 `userData.drain`（`gutter`/`pipe`/`basin`/`channel`/`culvert`/`soak`）——`check-rain.mjs` 的正向校验靠它。
+- 酿酒坊大院的排水构件**另标** `userData.brew`（`roof`/`gutter`/`spout`/`channel`/`culvert`/`soak`）
+  ——`check-brew.mjs` 与 `tools/brewery.html` 靠它；两套标签互不干扰，校验也互不干扰。
 - 烘焙版本 `BAKE_VER=2`（`src/main.js`）。
 
 ## 检查器基线（当前全绿）
 
 ```bash
-node test/smoke.mjs                 # 2471 网格，通过
+node test/smoke.mjs                 # 2948 网格（bbox −69..81 / −122..126），通过
 node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处
-node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7（不过 exit 1）
+node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7，exit 0
+node tools/check-brew.mjs           # 酿酒坊水路 7/7（屋面 30/30 + 30/30），exit 0
 node tools/check-poke.mjs           # 49 机位 0 处穿刺（按 userData.town 跳过领地）
-node tools/check-flicker.mjs        # 外观 0.00–0.18%、剖面 ≤0.32%，无成片抖动
+node tools/check-flicker.mjs        # 外观 0.03–0.18%、剖面 ≤0.32%，无成片抖动
+node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太阳走一天 48 档）
 ```
 
-## 状态：当前没有必须做的待办
+## 状态：最近一轮（修道院酿酒）已收尾
 
-最近一轮把能想到的都收尾了（都已在 `main`）：
+### 本轮：酿酒坊大院（未提交前先跑全量检查）
+
+- **扩地**：南 +20（`SX 56→76`）、东 +20（`EZ −58→−78`）、北 +12（`NX −52→−64`），西不动；
+  原围墙降级为院内庭墙，新旧墙压顶高度错开 0.02–0.1 m 避共面；8 座角塔；新四至常量 `SX2/NX2/EZ2`。
+  方案图 `tools/expansion-plan.py` → `docs/expansion-plan.png`（东排住宅 −17 → **−18.5**，树 `[48,30]` → `[66,-50]`）。
+- **酿酒坊**（`BREW` 六建筑，z 东→西）：粮仓 → 烘干窑 → 麦芽楼 → 煮酒房 → 冷却·发酵 → 酒窖酒肆；
+  服务巷 `LANE`、院坝水井、酒桶、酒花架/菜园药圃、墓园扩展、东排住宅外移（`EAST_HOUSE_X`）。
+- **院子排水**（`buildBreweryDrain`，`userData.brew`）：檐沟（贴巷一面）→ 集水管（找齐到 `pipeX=61.86`）→
+  落水管（每座一根，z0+0.15）→ 服务巷东缘明沟（x 61.0–61.95，通长 z −40..76，面 0.19 m）→
+  东端出口暗管（y −0.44..−0.04）→ 渗井（61.475, −46，井篦露地）。几何由 `brewInfo().drain` 回传。
+- **两个新工具**：`tools/check-brew.mjs`（正向连通 7 项，含檐口射线双查）、`tools/brewery.html`
+  （演示页：六座水路动画 + 名字标注 + 阶段机位 + 「一滴水走完全程」）。
+- 广场面片统一 `PlaneGeometry(148, 210)` @ `(6, 0, 10)`，十处文件同步（main/bakeworker/七个 tools 页/两个检查器）。
+- **阴影相机**（原「待决」，已定）：`P.shadow`（`src/params.js`）= x ±150 / y ±140 /
+  深 20–350 / 贴图 4096 → 7.3 cm/px（比原来 2048 配 ±110 的 10.7 cm/px 更细）。
+  量测：扩建后视空间需求已到 ±150，旧的 ±110 全天有 **133 处投影越界**（出视锥的墙体
+  整块丢影子、地面留一道硬边界）。新增 `tools/check-shadow.mjs` 静态守住这条基线
+  （太阳走一天 48 档，0 处越界）；太阳轨迹同步提到 `params.js` 的 `sunPos(t)`，
+  `main.js` 与校验器共用同一份。
+
+### 上一轮（都已在 `main`）
+
+最近一轮把能想到的都收尾了：
 
 - 前庭石板程序化贴图（`pavingTexture()`，世界坐标 UV）；回廊东西过道对称（`CLO.garth=16`）
 - 回廊整套排水：内檐沟 → 四角落水管 → 环院石砌明沟 → 暗管 → 渗井（终点，水渗入地下）。
