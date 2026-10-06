@@ -51,6 +51,11 @@ export const P = {
   // 镶玻方案：'chartres'（12–13 世纪叙事窗，深蓝深红、室内暗）
   //          'late'（14–16 世纪白地银黄，铅条疏、室内亮）见 glass.js 的 GLAZING
   glazing: 'chartres',
+
+  // 日光阴影相机（OrthographicCamera）的视锥：**必须罩住整片领地**，越界的物体不出影子，
+  // 地面上会留下一道"影子到此为止"的硬边界。H/top/bottom 是视空间的米数，map 是贴图边长，
+  // bias 是深度偏置。领地范围或这组数一变，就重跑 `node tools/check-shadow.mjs`。
+  shadow: { H: 150, top: 140, bottom: -140, near: 20, far: 350, map: 4096, bias: -0.0006 },
 };
 
 // 派生量。设计面板改动基础参数后需重算一次再重建。
@@ -63,3 +68,16 @@ export function recomputeDerived() {
   P.choirZ1  = -P.naveHW - P.choirBays * P.bay; // -27  歌坛终点（后殿起点）
 }
 recomputeDerived();
+
+// 太阳轨迹：t ∈ [0,1] → 7:00–19:00，自东（−z）经南（+x）向西（+z），半径 170 m。
+// main.js 的日夜渲染与 tools/check-shadow.mjs 的影子视锥校验共用这一份——
+// 轨迹一变，校验器查的就是同一条轨迹（P.shadow 必须罩住它）。
+const SUN_R = 170, SUN_ELEV0 = 7, SUN_ELEVSPAN = 56;
+export function sunPos(t, out) {
+  const s = Math.sin(Math.PI * t);                      // 高度因子：正午 1，晨昏 0
+  const az = Math.PI * t;
+  const elev = (SUN_ELEV0 + SUN_ELEVSPAN * s) * Math.PI / 180;
+  return out.set(SUN_R * Math.cos(elev) * Math.sin(az),
+                 SUN_R * Math.sin(elev),
+                 -SUN_R * Math.cos(elev) * Math.cos(az));
+}

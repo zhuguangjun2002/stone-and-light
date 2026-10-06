@@ -32,8 +32,8 @@ for (const d of doors) setDoorState(d, doorState === 'wicket' && !d.hasWicket ? 
 const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48), new THREE.MeshStandardMaterial());
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25;
 ground.userData.tag = '大地'; ground.userData.outdoor = true;
-const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190), new THREE.MeshStandardMaterial());
-plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20);
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210), new THREE.MeshStandardMaterial());
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(6, -0.08, 10);
 plaza.userData.tag = '广场'; plaza.userData.outdoor = true;
 scene.add(ground, plaza);
 scene.updateMatrixWorld(true);

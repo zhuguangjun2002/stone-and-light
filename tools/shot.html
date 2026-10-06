@@ -23,9 +23,9 @@ for (const [x, y, z] of [[0, 13, 22], [0, 13, -14], [0, 10, 42]]) {
 const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
   new THREE.MeshStandardMaterial({ color: '#89906f' }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.2; ground.receiveShadow = true;
-const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210),
   new THREE.MeshStandardMaterial({ color: '#9b968b' }));
-plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, 0, 20); plaza.receiveShadow = true;
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(6, 0, 10); plaza.receiveShadow = true;
 scene.add(ground, plaza);
 const soilTex = canvasTexture(512, 512, (ctx, w, h) => {
   const rnd = mulberry32(7);

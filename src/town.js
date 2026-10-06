@@ -11,12 +11,48 @@
 // 后者让建造动画把镇子排除在外（教堂是在既有的镇子里盖起来的）。
 
 import * as THREE from '../lib/three.module.js';
-import { wallWithOpenings, gableRoofGeometry, gableGeometry, makePinnacle } from './gothic.js';
+import { wallWithOpenings, gableRoofGeometry, gableGeometry, makePinnacle, kForApex } from './gothic.js';
 import { mulberry32, pavingTexture } from './materials.js';
 
 // 领地围墙的四至（世界坐标；+x 南、-x 北、+z 西、-z 东）
+// 旧四至：南 / 北 / 东三面旧墙在扩建后降为"庭墙"，只隔不断院子、不再挡外敌。
 const SX = 56, NX = -52, WZ = 78, EZ = -58;
+// 新四至：南扩 +20（南墙 56→76）、东扩 +20（东墙 -58→-78）、北扩 +12（北墙 -52→-64），
+// 西面不动。方案图：docs/expansion-plan.png（tools/expansion-plan.py 出图）。
+const SX2 = 76, NX2 = -64, EZ2 = -78;
 const WALL_H = 4.2, WALL_T = 0.85;
+
+// 门位（世界坐标）——建墙、画图、酿酒坊演示页共用同一组数
+const WAGON_Z = -35;    // 粮车门：新南墙与旧南墙各一道，粮车从这里进院
+const WICKET_Z = -20;   // 便门：新北墙与旧北墙各一道（正对教堂北侧）
+const FUNERAL_X = 0;    // 殡门：新东墙与旧东墙各一道（送葬队伍出东门去墓地）
+const WELL = { x: 68.5, z: 47 };   // 院坝水井（煮酒房与冷却发酵间之间的空档）
+const LANE = { x0: 57.5, x1: 61.5, z0: -40, z1: 76 };   // 服务巷：旧南墙与酒坊之间
+// 大院排水：六座建筑贴巷那面的檐口下挂檐沟 → 巷东缘一列落水管 → 服务巷东缘的明沟 →
+// 东端出口转暗管 → 渗井。构件都打 userData.brew 标签，tools/check-brew.mjs 做正向连通校验，
+// tools/brewery.html 拿同一份几何画水路（与 buildBreweryDrain 同源，改一处两边一起变）。
+const DRAIN = {
+  pipeX: 61.86,               // 落水管全排在巷东缘同一条线上（各建筑檐口深浅不一，靠集水管找齐）
+  chX0: 61.0, chX1: 61.95,    // 明沟压着服务巷东缘；x1 让开粮仓/酒窖的墙面（x0=62）
+  chY0: 0.07, chY1: 0.19,     // 沟面 0.19 比巷面（0.05）高一截，水才落得进去
+  chZ0: -40, chZ1: 76,        // 东端出口 z=-40（＝服务巷的东头），西头到巷的尽头为止
+  soak: { x: 61.475, z: -46 },// 渗井在东头外侧的院地上（＝明沟中线）
+};
+// 教士住宅东排（外移后的新址）：x≈0 留出 6.8 m 的殡门通道，原 [-5.5, 6] 会挡住轴线。
+// -17 改成 -18.5：房宽 9.2 m，-17 与 -8 只隔 9 m，两栋会咬在一起（压墙面共面）。
+const EAST_HOUSE_X = [-40, -28.5, -18.5, -8, 8, 17.5, 29, 40.5];
+
+// 酿酒坊大院的六座建筑（世界坐标；x 是进深、贴服务巷的那面开门（x0 朝北），z 是长度、沿院墙）。
+// 从东到西正好是一条生产流：收粮 → 烘干 → 浸麦发芽 → 煮酒 → 冷却发酵 → 陈酿售卖。
+const BREW = [
+  { key: 'granary',   name: '粮仓',      x0: 62, x1: 74, z0: -30, z1: -12, h: 7.2, rh: 3.0, roof: 'slate', hoist: true },
+  { key: 'kiln',      name: '烘干窑',    x0: 64, x1: 74, z0: -6,  z1: 6,   h: 6.4, rh: 2.6, roof: 'tile', stone: true,
+    chimney: { x: 73, z: -5, h: 13.5 } },
+  { key: 'malthouse', name: '麦芽楼',    x0: 63, x1: 74, z0: 8,   z1: 24,  h: 8.8, rh: 3.4, roof: 'slate' },
+  { key: 'brewhouse', name: '煮酒房',    x0: 63, x1: 74, z0: 28,  z1: 44,  h: 8.0, rh: 3.2, roof: 'tile' },
+  { key: 'cooling',   name: '冷却·发酵', x0: 63, x1: 74, z0: 50,  z1: 60,  h: 5.6, rh: 2.4, roof: 'tile' },
+  { key: 'cellar',    name: '酒窖·酒肆', x0: 62, x1: 75, z0: 62,  z1: 76,  h: 6.6, rh: 2.8, roof: 'tile', stone: true },
+];
 
 // 回廊方位（南侧、中厅与耳堂之间），尺寸由外层方框与内院定。
 // x0 取 18.5：扶壁墩最远伸到 x≈15.9，回廊与它之间留 ~2.6 m 的过道（类 slype），
@@ -41,6 +77,8 @@ function townMaterials() {
     slate: M('#4e5766', 0.8),  // 石板瓦
     wood: M('#4a3320', 0.8),
     grass: M('#6d7c4c', 1),
+    bed: M('#5c6a3c', 1),       // 园圃（菜园 / 药圃 / 酒花圃）的畦地
+    row: M('#7f8d52', 1),       // 畦垄上的作物
     path: M('#948e80', 1),
     paving: M(paveTex ? '#ffffff' : '#c4b690', 1, paveTex ? { map: paveTex } : {}),   // 前庭石板（贴图按世界坐标铺）
     earth: M('#8a7d62', 1),      // 压实土
@@ -79,28 +117,57 @@ function wallTop(g, mats, { alongX, cx, cz, len, wallH, wallT, gaps = [] }) {
   }
 }
 
-// 领地围墙：四面墙，西面开正门、东面开殡门、南北各开一道便门
+// 通行缺口（门洞）：给局部中心、半宽 a、起拱高，按墙高反解尖拱 k。
+// k = kForApex(a, 拱高)；拱高取"墙高压顶之下"与 a*1.3 的较小者——
+// 太尖会戳出墙头，太矮又不像哥特；a > 墙高 - 起拱高 - 0.25 时 k 会被压到 0.5（半圆券），
+// 所以宽门洞的起拱高要给足。
+function gate(cx, a, wallH, springY = 0.9) {
+  const apex = Math.min(wallH - springY - 0.25, a * 1.3);
+  return { cx, a, y0: 0, springY, k: Math.max(0.5, kForApex(a, apex)) };
+}
+
+// 领地围墙：
+//   · 外圈新墙四面（西墙加长到新四至，西正门门楼原样保留）
+//   · 旧南 / 东 / 北三面墙降为庭墙，只隔院子，留出一串通行缺口
+//   · 四角塔（旧四角 + 新四角）
+// 各墙压顶高度彼此差几厘米，避免转角处共面打架。
 function buildWalls(mats) {
   const g = new THREE.Group();
-  const spanX = SX - NX, cx = (SX + NX) / 2;   // 108 / 2
-  const spanZ = WZ - EZ, cz = (WZ + EZ) / 2;   // 136 / 10
 
-  // 西墙（正门在 x = 0）
-  const west = solid(wallWithOpenings(spanX, 0, WALL_H, WALL_T,
-    [{ cx: -cx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 }]), mats.wall, cx, 0, WZ);
-  g.add(west);
-  // 东墙（殡门）
-  const east = solid(wallWithOpenings(spanX, 0, WALL_H + 0.02, WALL_T,
-    [{ cx: -cx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 }]), mats.wallDark, cx, 0, EZ);
-  g.add(east);
-  // 南墙 + 便门（世界 z = 20 → 局部 cx = -(20 - cz)）
-  const south = solid(wallWithOpenings(spanZ, 0, WALL_H - 0.03, WALL_T,
-    [{ cx: -(20 - cz), a: 1.0, y0: 0, springY: 1.0, k: 1.0 }]), mats.wall, SX, 0, cz, Math.PI / 2);
-  g.add(south);
-  // 北墙 + 便门（世界 z = -20）
-  const north = solid(wallWithOpenings(spanZ, 0, WALL_H + 0.05, WALL_T,
-    [{ cx: -(-20 - cz), a: 1.0, y0: 0, springY: 1.0, k: 1.0 }]), mats.wallDark, NX, 0, cz, Math.PI / 2);
-  g.add(north);
+  // ---------- 外圈新墙 ----------
+  const spanX = SX2 - NX2, cx = (SX2 + NX2) / 2;   // 140 / 6
+  const spanZ = WZ - EZ2, cz = (WZ + EZ2) / 2;     // 156 / 0
+  // 西墙（正门在 x = 0；门楼见下）
+  g.add(solid(wallWithOpenings(spanX, 0, WALL_H, WALL_T,
+    [{ cx: -cx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 }]), mats.wall, cx, 0, WZ));
+  // 新东墙（殡门在 x = 0）
+  g.add(solid(wallWithOpenings(spanX, 0, WALL_H + 0.02, WALL_T,
+    [{ cx: FUNERAL_X - cx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 }]), mats.wallDark, cx, 0, EZ2));
+  // 新南墙 + 粮车门（绕 y 转 90° 后局部 x = cz - 世界 z）
+  g.add(solid(wallWithOpenings(spanZ, 0, WALL_H - 0.03, WALL_T,
+    [gate(cz - WAGON_Z, 2.6, WALL_H - 0.03)]), mats.wall, SX2, 0, cz, Math.PI / 2));
+  // 新北墙 + 便门（世界 z = -20）
+  g.add(solid(wallWithOpenings(spanZ, 0, WALL_H + 0.05, WALL_T,
+    [{ cx: cz - WICKET_Z, a: 1.0, y0: 0, springY: 1.0, k: 1.0 }]), mats.wallDark, NX2, 0, cz, Math.PI / 2));
+
+  // ---------- 旧墙降为庭墙 ----------
+  const oSpanZ = WZ - EZ, oCz = (WZ + EZ) / 2;     // 136 / 10
+  const oSpanX = SX - NX, oCx = (SX + NX) / 2;     // 108 / 2
+  // 旧南墙（x = SX）：粮车门、便门、庭门（回廊一侧）、以及通向东扩带的缺口
+  g.add(solid(wallWithOpenings(oSpanZ, 0, WALL_H - 0.06, WALL_T,
+    [gate(oCz - WAGON_Z, 2.6, WALL_H - 0.06),
+     { cx: oCz - 20, a: 1.0, y0: 0, springY: 1.0, k: 1.0 },
+     gate(oCz - 26, 2.0, WALL_H - 0.06, 0.8),
+     gate(oCz - 68, 2.0, WALL_H - 0.06, 0.8)]), mats.wallDark, SX, 0, oCz, Math.PI / 2));
+  // 旧东墙（z = EZ）：殡门 + 两处缺口（送葬环道 / 南侧土路）
+  g.add(solid(wallWithOpenings(oSpanX, 0, WALL_H + 0.08, WALL_T,
+    [{ cx: FUNERAL_X - oCx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 },
+     gate(-40 - oCx, 2.0, WALL_H + 0.08, 0.8),
+     gate(22 - oCx, 2.0, WALL_H + 0.08, 0.8)]), mats.wallDark, oCx, 0, EZ));
+  // 旧北墙（x = NX）：便门 + 通向草药圃的缺口
+  g.add(solid(wallWithOpenings(oSpanZ, 0, WALL_H - 0.1, WALL_T,
+    [{ cx: oCz - WICKET_Z, a: 1.0, y0: 0, springY: 1.0, k: 1.0 },
+     gate(oCz - 4, 2.0, WALL_H - 0.1, 0.8)]), mats.wallDark, NX, 0, oCz, Math.PI / 2));
 
   // 西正门门楼：一整个带尖拱门洞的楼体，上覆双坡顶，四角小尖塔
   const GH_W = 10.5, GH_D = 5.2, GH_H = 8.6;
@@ -119,18 +186,198 @@ function buildWalls(mats) {
     g.add(pin);
   }
 
-  // 墙头收口：压顶石 + 垤口（跳过门洞与门楼），四角小塔楼
-  wallTop(g, mats, { alongX: true,  cx,     cz: WZ, len: spanX, wallH: WALL_H,         wallT: WALL_T, gaps: [[-5.6, 5.6]] });
-  wallTop(g, mats, { alongX: true,  cx,     cz: EZ, len: spanX, wallH: WALL_H + 0.02,  wallT: WALL_T, gaps: [[-2.2, 2.2]] });
-  wallTop(g, mats, { alongX: false, cx: SX, cz,     len: spanZ, wallH: WALL_H - 0.03,  wallT: WALL_T, gaps: [[18.5, 21.5]] });
-  wallTop(g, mats, { alongX: false, cx: NX, cz,     len: spanZ, wallH: WALL_H + 0.05,  wallT: WALL_T, gaps: [[-21.5, -18.5]] });
+  // 墙头收口：压顶石 + 垤口（gaps 一律是世界坐标），四角小塔楼
+  wallTop(g, mats, { alongX: true,  cx,      cz: WZ,  len: spanX, wallH: WALL_H,          wallT: WALL_T, gaps: [[-5.6, 5.6]] });
+  wallTop(g, mats, { alongX: true,  cx,      cz: EZ2, len: spanX, wallH: WALL_H + 0.02,   wallT: WALL_T, gaps: [[FUNERAL_X - 2.6, FUNERAL_X + 2.6]] });
+  wallTop(g, mats, { alongX: false, cx: SX2, cz,      len: spanZ, wallH: WALL_H - 0.03,   wallT: WALL_T, gaps: [[WAGON_Z - 3.6, WAGON_Z + 3.6]] });
+  wallTop(g, mats, { alongX: false, cx: NX2, cz,      len: spanZ, wallH: WALL_H + 0.05,   wallT: WALL_T, gaps: [[-21.5, -18.5]] });
+  wallTop(g, mats, { alongX: false, cx: SX,  cz: oCz, len: oSpanZ, wallH: WALL_H - 0.06,  wallT: WALL_T,
+    gaps: [[WAGON_Z - 3.6, WAGON_Z + 3.6], [18.5, 21.5], [24, 28], [66, 70]] });
+  wallTop(g, mats, { alongX: true,  cx: oCx, cz: EZ,  len: oSpanX, wallH: WALL_H + 0.08,  wallT: WALL_T,
+    gaps: [[-2.2, 2.2], [-42, -38], [20, 24]] });
+  wallTop(g, mats, { alongX: false, cx: NX,  cz: oCz, len: oSpanZ, wallH: WALL_H - 0.1,   wallT: WALL_T,
+    gaps: [[-21.5, -18.5], [2, 6]] });
   const cornerH = WALL_H + 1.0;
-  for (const [tx, tz] of [[SX, WZ], [SX, EZ], [NX, WZ], [NX, EZ]]) {
+  for (const [tx, tz] of [[SX2, WZ], [SX2, EZ2], [NX2, WZ], [NX2, EZ2],
+                          [SX, WZ], [SX, EZ], [NX, WZ], [NX, EZ]]) {
     g.add(solid(new THREE.BoxGeometry(1.1, cornerH, 1.1), mats.wallDark, tx, cornerH / 2, tz));
     const pin = makePinnacle(mats.wall, 0.8);
     pin.position.set(tx, cornerH, tz);
     pin.traverse((o) => { if (o.isMesh) o.userData.buildSkip = true; });
     g.add(pin);
+  }
+  return g;
+}
+
+// 酒坊单体：墙身 + 两片坡板屋面（脊沿 z）+ 山墙 + 西面的大门。
+// 屋面是两片有厚度的坡板而不是整块三棱柱：山墙因此露在外面（抹灰三角 + 檐口挑出），
+// 两片坡板在脊线上共用一条棱、山墙把两端封死，屋架下的空腔雨水进不去。
+function brewHouse(spec, mats) {
+  const g = new THREE.Group();
+  const w = spec.x1 - spec.x0, d = spec.z1 - spec.z0, h = spec.h, rh = spec.rh;
+  const wallMat = spec.stone ? mats.wall : mats.plaster;
+  const roofMat = spec.roof === 'slate' ? mats.slate : mats.tile;
+  const cx = (spec.x0 + spec.x1) / 2, cz = (spec.z0 + spec.z1) / 2;
+
+  g.add(solid(new THREE.BoxGeometry(w, h, d), wallMat, 0, h / 2, 0));
+  // 木构：四角立贴 + 腰梁（石砌体不打构架）
+  if (!spec.stone) {
+    const postG = new THREE.BoxGeometry(0.26, h, 0.26);
+    for (const sx of [1, -1]) for (const sz of [1, -1]) {
+      g.add(solid(postG, mats.timber, sx * (w / 2 - 0.17), h / 2, sz * (d / 2 - 0.17)));
+    }
+    g.add(solid(new THREE.BoxGeometry(w + 0.06, 0.2, d + 0.06), mats.timber, 0, h * 0.64, 0));
+  }
+
+  // 屋面：半宽比墙多挑 0.5 m（檐口），坡板厚 0.26，顶面正好过脊线与檐口
+  const halfW = w / 2 + 0.5, L = Math.hypot(halfW, rh), t = 0.26;
+  const phi = Math.atan2(rh, halfW), nx = rh / L, ny = halfW / L;
+  for (const s of [1, -1]) {
+    const slab = solid(new THREE.BoxGeometry(L, t, d + 0.8), roofMat,
+      s * (halfW / 2 - nx * t / 2), h + rh / 2 - ny * t / 2, 0);
+    slab.rotation.z = -s * phi;
+    slab.userData.brew = 'roof';   // check-brew / brewery.html 靠这个标签认出屋面
+    g.add(slab);
+  }
+  // 山墙（两端）：三角抹灰板，把屋架下的空腔封住，也补出屋顶下的墙面。
+  // 三角比坡板顶面缩进 ~0.1 m：让山墙的斜边埋进坡板里，而不是跟坡板顶面共面（否则会闪）。
+  const gableG = gableGeometry(halfW - 0.12, h - 0.05, h + rh - 0.14, 0.3);
+  for (const s of [1, -1]) {
+    const tri = new THREE.Mesh(gableG, wallMat);
+    tri.position.z = s * (d / 2 - 0.1);
+    tri.castShadow = tri.receiveShadow = true;
+    tri.userData.buildSkip = true;
+    g.add(tri);
+  }
+
+  // 贴服务巷那面（x0，朝北）的大门：门板比墙面凸出 4 cm，不做洞口，免得屋里漏光进雨
+  const dw = Math.min(3.6, d - 3), dh = Math.min(3.6, h - 1.2);
+  g.add(solid(new THREE.BoxGeometry(0.16, dh, dw), mats.wood, -w / 2 - 0.04, dh / 2, 0));
+  g.add(solid(new THREE.BoxGeometry(0.2, 0.18, dw + 0.5), mats.timber, -w / 2 - 0.05, dh + 0.1, 0));
+  // 另两面（x1 朝南、z0 朝东）开窗（一排小窗，够采光即可）
+  const winG = new THREE.BoxGeometry(0.14, 1.15, 0.95);
+  const nWin = Math.max(2, Math.floor(d / 5));
+  for (let i = 0; i < nWin; i++) {
+    const z = -d / 2 + (i + 0.5) * (d / nWin);
+    g.add(solid(winG, mats.win, w / 2 + 0.03, h * 0.62, z));
+  }
+  g.add(solid(new THREE.BoxGeometry(1.0, 1.3, 0.14), mats.win, 0, h * 0.5, -d / 2 - 0.06));
+
+  // 烘干窑烟囱：从地面直上，穿出屋面
+  if (spec.chimney) {
+    const c = spec.chimney, ch = c.h;
+    g.add(solid(new THREE.BoxGeometry(1.15, ch, 1.15), mats.wallDark, c.x - cx, ch / 2, c.z - cz));
+    g.add(solid(new THREE.BoxGeometry(1.5, 0.3, 1.5), mats.wallDark, c.x - cx, ch + 0.15, c.z - cz));
+  }
+  // 粮仓的吊装口：山墙上开个小门 + 伸出去的挑梁（粮包从这里吊上楼）
+  if (spec.hoist) {
+    g.add(solid(new THREE.BoxGeometry(1.2, 1.7, 0.16), mats.wood, 0, h + 1.1, d / 2 + 0.14));
+    g.add(solid(new THREE.BoxGeometry(0.26, 0.26, 2.4), mats.timber, 0, h + 2.4, d / 2 + 1.0));
+    g.add(solid(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 6), mats.wood, 0, h + 1.6, d / 2 + 2.0));
+  }
+  return g;
+}
+
+// 酿酒坊大院：六座生产建筑 + 院坝水井 + 酒桶 + 排水
+function buildBrewery(mats) {
+  const g = new THREE.Group();
+  for (const spec of BREW) {
+    const b = brewHouse(spec, mats);
+    b.position.set((spec.x0 + spec.x1) / 2, 0, (spec.z0 + spec.z1) / 2);
+    g.add(b);
+  }
+  // 院坝水井：煮酒与冷却都要水
+  g.add(yardWell(mats, WELL.x, WELL.z));
+  // 酒桶堆在煮酒房与冷却发酵间之间的空档
+  const barrelG = new THREE.CylinderGeometry(0.5, 0.54, 1.3, 12);
+  for (const [bx, bz] of [[64.5, 45.4], [64.5, 47.4], [66.2, 46.4], [68.0, 44.6]]) {
+    g.add(solid(barrelG, mats.wood, bx, 0.65, bz));
+  }
+  g.add(buildBreweryDrain(mats));
+  return g;
+}
+
+// 大院排水：檐沟 → 集水管 → 落水管 → 服务巷明沟 → 暗管 → 渗井。
+// 跟回廊那套（buildCloister 里的 drain 构件）一个套路，只是标签换成 userData.brew，
+// 两套校验互不干扰。几何常量在 DRAIN / BREW 里，brewInfo() 原样回传给演示页与校验器。
+//
+// 檐口贴巷一侧（x0），但六座的进深不一样（x0 = 62/63/64），檐口也就深浅不一：
+//   粮仓、酒窖 x0=62 → 檐口 61.5，落水管 61.86 已经在檐沟正下方，不用拐
+//   麦芽楼等三座 x0=63 → 檐口 62.5，用一段横的集水管把水引到 61.86
+//   烘干窑   x0=64 → 檐口 63.5，同上，横管长一点
+function buildBreweryDrain(mats) {
+  const g = new THREE.Group();
+  const dr = (tag, geo, mat, x, y, z) => {
+    const m = solid(geo, mat, x, y, z); m.userData.brew = tag; g.add(m); return m;
+  };
+  for (const s of BREW) {
+    const eaveX = s.x0 - 0.5, ey = s.h, cz = (s.z0 + s.z1) / 2, d = s.z1 - s.z0;
+    // 檐沟：贴北檐的一道铅皮槽。顶面比檐口低 0.42 m，水从檐口垂直落进来；
+    // 东端比檐口多伸 0.48 m，正好压住落水管，西端到 x0-0.02（离墙面 2 cm，看着是挂在墙上的）
+    dr('gutter', new THREE.BoxGeometry(0.72, 0.16, d + 0.6), mats.lead, eaveX + 0.12, ey - 0.5, cz);
+    // 集水管：檐沟与巷边落水管不在一条线上时，横一段把水引过去（接头埋进檐沟里）
+    if (DRAIN.pipeX < eaveX - 0.24) {
+      const a0 = DRAIN.pipeX - 0.16, a1 = eaveX - 0.1;
+      dr('gutter', new THREE.BoxGeometry(a1 - a0, 0.16, 0.3), mats.lead,
+        (a0 + a1) / 2, ey - 0.5, s.z0 + 0.15);
+    }
+    // 落水管：从檐沟底直落到明沟面上方 5 cm
+    dr('spout', new THREE.CylinderGeometry(0.09, 0.09, ey - 0.82, 8), mats.lead,
+      DRAIN.pipeX, (ey - 0.34) / 2, s.z0 + 0.15);
+  }
+  // 明沟：压服务巷东缘，通长一条，水沿它一直往东（z=-40）汇到出口
+  dr('channel', new THREE.BoxGeometry(DRAIN.chX1 - DRAIN.chX0, DRAIN.chY1 - DRAIN.chY0,
+    DRAIN.chZ1 - DRAIN.chZ0), mats.wallDark,
+    (DRAIN.chX0 + DRAIN.chX1) / 2, (DRAIN.chY0 + DRAIN.chY1) / 2, (DRAIN.chZ0 + DRAIN.chZ1) / 2);
+  // 暗管：从明沟东端出口穿到渗井（埋在地下，看不见）
+  dr('culvert', new THREE.BoxGeometry(0.5, 0.4, 6.4), mats.lead,
+    DRAIN.soak.x, -0.24, -43.2);
+  // 渗井：井圈埋着、井篦露在地面上——水从这里离开系统
+  dr('soak', new THREE.CylinderGeometry(0.72, 0.8, 0.55, 12), mats.wallDark, DRAIN.soak.x, -0.3, DRAIN.soak.z);
+  dr('soak', new THREE.CylinderGeometry(0.6, 0.6, 0.12, 12), mats.lead, DRAIN.soak.x, 0.05, DRAIN.soak.z);
+  return g;
+}
+
+// 院坝水井：井圈 + 水面 + 井架 + 小瓦顶（比回廊水井粗一号）
+function yardWell(mats, x, z) {
+  const g = new THREE.Group();
+  g.add(solid(new THREE.CylinderGeometry(1.2, 1.3, 0.95, 12), mats.wall, 0, 0.47, 0));
+  const water = new THREE.Mesh(new THREE.CircleGeometry(1.02, 16), mats.water);
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0.9;
+  water.userData.buildSkip = true;
+  g.add(water);
+  const postG = new THREE.CylinderGeometry(0.1, 0.1, 2.3, 6);
+  for (const s of [-1, 1]) g.add(solid(postG, mats.timber, s * 1.0, 2.0, 0));
+  g.add(solid(new THREE.BoxGeometry(2.9, 0.18, 1.3), mats.timber, 0, 3.15, 0));
+  const roof = new THREE.Mesh(gableRoofGeometry(0.9, 0, 1.1, 3.3), mats.tile);
+  roof.rotation.y = Math.PI / 2;
+  roof.position.set(0, 3.2, 0);
+  roof.castShadow = roof.userData.buildSkip = true;
+  g.add(roof);
+  g.add(solid(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 6), mats.wood, 0, 2.3, 0));
+  g.position.set(x, 0, z);
+  return g;
+}
+
+// 园圃：酒花圃（东扩带，搭架让酒花藤爬）、教士菜园与草药圃的畦垄
+function buildGardens(mats) {
+  const g = new THREE.Group();
+  // 教士菜园（东扩带西段，x -4..44 / z -69..-58）：六畦沿 x 走
+  for (let z = -67.5; z <= -59.5; z += 1.6) {
+    g.add(solid(new THREE.BoxGeometry(42, 0.18, 0.95), mats.row, 20, 0.06 + 0.09, z));
+  }
+  // 草药圃（北扩带西段，x -63..-53 / z 47..77）：五畦沿 z 走
+  for (let x = -61.5; x <= -54.5; x += 1.75) {
+    g.add(solid(new THREE.BoxGeometry(0.95, 0.18, 27), mats.row, x, 0.06 + 0.09, 62));
+  }
+  // 酒花圃（东扩带北段，x -46..-8 / z -69..-58）：五行木杆 + 顶部铁丝 + 爬藤
+  const postG = new THREE.BoxGeometry(0.16, 3.3, 0.16);
+  const vineG = new THREE.BoxGeometry(0.22, 3.0, 0.22);
+  for (let x = -43; x <= -11; x += 8) {
+    for (const z of [-67.5, -63.5, -59.5]) g.add(solid(postG, mats.timber, x, 1.65, z));
+    g.add(solid(new THREE.BoxGeometry(0.09, 0.09, 9.0), mats.lead, x, 3.2, -63.5));
+    for (const z of [-65.5, -61.5]) g.add(solid(vineG, mats.tree, x, 1.5, z));
   }
   return g;
 }
@@ -319,42 +566,49 @@ function buildHouses(mats, rnd) {
     g.add(house);
     k++;
   }
-  // 东墙一排：正面朝西（+z）
-  for (let x = -40; x <= 44; x += 11.5) {
+  // 东墙一排（外移到新东墙内侧）：正面朝西（+z），
+  // x = ±8 之间留出 6.8 m 的殡门通道——送葬队伍出殡门一直望得见教堂。
+  for (const x of EAST_HOUSE_X) {
     const h = hh[(k + 3) % hh.length];
     const hd = 8.0 + rnd() * 1.6;
     const house = canonHouse(9.2, hd, h, mats, rnd, 'tile');
-    house.position.set(x, 0, EZ + 0.4 + hd / 2);
+    house.position.set(x, 0, EZ2 + 0.4 + hd / 2);
     g.add(house);
     k++;
   }
   return g;
 }
 
-// 墓地：北侧划一块地，成排的墓碑与十字，另种几棵紫杉
+// 墓地：北侧划一块地，成排的墓碑与十字，另种几棵紫杉。
+// 北扩之后旧北墙外还有一条 12 m 宽的带子，接一块墓园扩展（同一套碑式）。
 function buildGraveyard(mats, rnd) {
   const g = new THREE.Group();
-  const gx0 = -46, gx1 = -26, gz0 = -44, gz1 = 46;   // 东缘停在耳堂臂（x≈-24）之外，免得草坪压到地坪
-  const lawn = new THREE.Mesh(new THREE.PlaneGeometry(gx1 - gx0, gz1 - gz0), mats.grass);
-  lawn.rotation.x = -Math.PI / 2;
-  lawn.position.set((gx0 + gx1) / 2, 0.04, (gz0 + gz1) / 2);
-  lawn.receiveShadow = true;
-  lawn.userData.buildSkip = true;
-  g.add(lawn);
+  const PLOTS = [
+    [-46, -26, -44, 46],    // 现状墓地：东缘停在耳堂臂（x≈-24）之外，免得草坪压到地坪
+    [-63, -53, -43, 45],    // 北扩带的墓园扩展：贴着旧北墙外侧，与草药圃分居南北
+  ];
   const tombG = new THREE.BoxGeometry(0.66, 0.9, 0.18);
   const crossV = new THREE.BoxGeometry(0.12, 1.15, 0.12);
   const crossH = new THREE.BoxGeometry(0.6, 0.12, 0.12);
-  for (let z = gz0 + 3, row = 0; z <= gz1 - 3; z += 3.2, row++) {
-    for (let x = gx0 + 2 + (row % 2) * 1.4; x <= gx1 - 2; x += 3.0) {
-      if (rnd() < 0.18) continue;
-      if (rnd() < 0.28) {          // 十字
-        const xc = x, zc = z;
-        const v = solid(crossV, mats.grave, xc, 0.58, zc, (rnd() - 0.5) * 0.2);
-        const hbar = solid(crossH, mats.grave, xc, 0.9, zc, (rnd() - 0.5) * 0.2);
-        g.add(v, hbar);
-      } else {                     // 立碑
-        const tilt = (rnd() - 0.5) * 0.16;
-        g.add(solid(tombG, mats.grave, x, 0.45, z, tilt));
+  for (const [gx0, gx1, gz0, gz1] of PLOTS) {
+    const lawn = new THREE.Mesh(new THREE.PlaneGeometry(gx1 - gx0, gz1 - gz0), mats.grass);
+    lawn.rotation.x = -Math.PI / 2;
+    lawn.position.set((gx0 + gx1) / 2, 0.04, (gz0 + gz1) / 2);
+    lawn.receiveShadow = true;
+    lawn.userData.buildSkip = true;
+    g.add(lawn);
+    for (let z = gz0 + 3, row = 0; z <= gz1 - 3; z += 3.2, row++) {
+      for (let x = gx0 + 2 + (row % 2) * 1.4; x <= gx1 - 2; x += 3.0) {
+        if (rnd() < 0.18) continue;
+        if (rnd() < 0.28) {          // 十字
+          const xc = x, zc = z;
+          const v = solid(crossV, mats.grave, xc, 0.58, zc, (rnd() - 0.5) * 0.2);
+          const hbar = solid(crossH, mats.grave, xc, 0.9, zc, (rnd() - 0.5) * 0.2);
+          g.add(v, hbar);
+        } else {                     // 立碑
+          const tilt = (rnd() - 0.5) * 0.16;
+          g.add(solid(tombG, mats.grave, x, 0.45, z, tilt));
+        }
       }
     }
   }
@@ -413,12 +667,29 @@ function buildGround(mats) {
   patch(mats.grass, 10, 38, -20, -27, 0.04);
   // 西北角草地（墓地与前庭之间）
   patch(mats.grass, 15, 22, -37.5, 64, 0.04);
-  // 后殿东侧压实土院子（铺满整个东端，别在边上留一圈灰广场）
-  patch(mats.earth, 72, 14, 5, -45, 0.03);
-  // 南侧长条土院子（回廊与南墙之间）
+  // 后殿东侧的绕殿巡游道（旧东排住宅外移后腾出来的环道，压实地）
+  patch(mats.earth, 75, 17, 3.5, -49.5, 0.03);
+  // 南侧长条土院子（回廊与旧南墙之间）
   patch(mats.earth, 9, 125, 47.5, 12.5, 0.03);
   // 北侧步道（前庭 → 北侧草地）
   patch(mats.paving, 2, 42, -17.5, 31, 0.06);
+
+  // ---------- 扩建带地面 ----------
+  // 南扩带：酿酒坊大院（压实土）
+  patch(mats.earth, 20, 136, 66, 10, 0.03);
+  // 服务巷：粮车与酒桶往来，铺一层碎石料
+  patch(mats.path, LANE.x1 - LANE.x0, LANE.z1 - LANE.z0, (LANE.x0 + LANE.x1) / 2, (LANE.z0 + LANE.z1) / 2, 0.05);
+  // 东扩带：宅地与园圃的草底
+  patch(mats.grass, 100, 20, 6, -68, 0.035);
+  patch(mats.grass, 20, 20, -54, -68, 0.035);
+  // 酒花圃 / 教士菜园（东扩带西段，绕殿巡游道与教士住宅之间）
+  patch(mats.bed, 38, 11, -27, -63.5, 0.05);
+  patch(mats.bed, 48, 11, 20, -63.5, 0.05);
+  // 北扩带：草底 + 药圃 + 墓园扩展的草坪（墓园那块由 buildGraveyard 铺）
+  patch(mats.grass, 12, 136, (NX2 + NX) / 2, 10, 0.03);
+  patch(mats.bed, 10, 30, -58, 62, 0.05);
+  // 旧北墙缺口（z = 4）到草药圃的碎石踏步
+  patch(mats.paving, 15, 3, -58, 4, 0.055);
   return g;
 }
 
@@ -461,7 +732,8 @@ function buildMarket(mats, rnd) {
 function buildTrees(mats, rnd) {
   const g = new THREE.Group();
   const spots = [
-    [20, 44], [38, 8], [48, 30], [-24, -12], [-38, 18], [-20, 46],
+    [20, 44], [38, 8], [66, -50],   // 原 [48,30] 压在南排 z=31.6 的教士住宅里，挪进酿酒坊大院
+    [-24, -12], [-38, 18], [-20, 46],
     [44, 60], [-44, 64], [8, 74], [-10, 74], [50, -8], [-30, -50], [30, -50],
   ];
   for (const [x, z] of spots) g.add(makeTree(mats, 0.9 + rnd() * 0.6, rnd, x, z, false));
@@ -482,18 +754,25 @@ export function buildTown(labels = []) {
     m.receiveShadow = true; m.userData.buildSkip = true;
     return m;
   };
-  root.add(outerGrass(124, 48, 2, 102));    // 西墙外
-  root.add(outerGrass(124, 32, 2, -74));    // 东墙外
+  root.add(outerGrass(150, 48, 6, 102));    // 西墙外（按新四至加宽）
+  root.add(outerGrass(150, 44, 6, -100));   // 东墙外（新东墙 -78 之外）
+  root.add(outerGrass(5, 156, 78.5, 0));    // 新南墙外的窄边
+  root.add(outerGrass(5, 156, -66.5, 0));   // 新北墙外的窄边
   root.add(buildCloister(mats));
   root.add(buildHouses(mats, rnd));
   root.add(buildGraveyard(mats, rnd));
   root.add(buildMarket(mats, rnd));
+  root.add(buildBrewery(mats));
+  root.add(buildGardens(mats));
   root.add(buildTrees(mats, rnd));
 
   labels.push({ text: '回廊（修士的日常动线）', pos: [30.7, 7.5, 25.2], scope: 'out' });
   labels.push({ text: '教堂领地围墙', pos: [0, 6.5, WZ], scope: 'out' });
   labels.push({ text: '北侧墓地', pos: [-32, 3, 0], scope: 'out' });
   labels.push({ text: '西前庭集市', pos: [13, 6, 66], scope: 'out' });
+  labels.push({ text: '酿酒坊大院', pos: [59, 12, 20], scope: 'out' });
+  labels.push({ text: '绕殿巡游道 · 园圃', pos: [4, 9, -66], scope: 'out' });
+  labels.push({ text: '墓园扩展（北扩）', pos: [-58, 8, 0], scope: 'out' });
   // 标记领地网格：针对教堂外壳的检查器（穿刺等）可以据此跳过领地
   root.traverse((o) => { if (o.isMesh) o.userData.town = true; });
   return root;
@@ -517,5 +796,65 @@ export function drainageInfo() {
     eaveIn: { W: gx - zIn, E: gx + garth + zIn, N: gz - zIn, S: gz + garth + zIn },
     eaveOut: { W: gx - zOut, E: gx + garth + zOut, N: gz - zOut, S: gz + garth + zOut },
     soak: { x: 44.3, z: Z1 },
+  };
+}
+
+// 酿酒坊演示页（tools/brewery.html）与酿酒排水校验用：把大院的几何算出来，
+// 与 buildBrewery / buildWalls 同源同一组常量，改一处两边一起变。
+export function brewInfo() {
+  return {
+    // 领地四至（新 / 旧）
+    bounds: { SX: SX2, NX: NX2, WZ, EZ: EZ2 },
+    oldBounds: { SX, NX, EZ },
+    // 大院与服务巷、水井
+    yard: { x0: SX, x1: SX2, z0: EZ, z1: WZ },
+    lane: { ...LANE },
+    well: { ...WELL },
+    // 六座建筑：footprint + 檐高 / 脊高（脊高 = h + rh），屋面挑檐 0.5 m
+    buildings: BREW.map((b) => ({
+      key: b.key, name: b.name, x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1,
+      h: b.h, rh: b.rh, eaveY: b.h, ridgeY: b.h + b.rh, overhang: 0.5,
+      stone: !!b.stone, roof: b.roof,
+      eaveW: b.x0 - 0.5, eaveE: b.x1 + 0.5,   // 东 / 西檐口的世界 x
+      eaveN: b.z0 - 0.4, eaveS: b.z1 + 0.4,   // 北 / 南檐口的世界 z
+    })),
+    // 门位（世界坐标）
+    gates: {
+      wagon: { x: SX2, z: WAGON_Z, a: 2.6 },   // 新南墙粮车门
+      wagonOld: { x: SX, z: WAGON_Z, a: 2.6 }, // 旧南墙（大院与领地之间）
+      funeral: { x: FUNERAL_X, z: EZ2, a: 1.7 },
+      wicket: { x: NX2, z: WICKET_Z, a: 1.0 },
+    },
+    // 教士住宅东排新址（x）与旧址（z），画图时对得上
+    houses: { x: [...EAST_HOUSE_X], oldZ: { z0: EZ + 0.4, z1: EZ + 9.6 } },
+    // 排水：与 buildBreweryDrain 同源。runs 是每座建筑自己的檐沟 / 集水管 / 落水管，
+    // check-brew 拿它逐座比对场景里的网格，brewery.html 拿它铺水路动画。
+    drain: {
+      pipeX: DRAIN.pipeX,
+      yChan: DRAIN.chY1,
+      channel: {
+        x0: DRAIN.chX0, x1: DRAIN.chX1, y0: DRAIN.chY0, y1: DRAIN.chY1,
+        z0: DRAIN.chZ0, z1: DRAIN.chZ1,
+      },
+      outlet: { x: (DRAIN.chX0 + DRAIN.chX1) / 2, z: DRAIN.chZ0 },   // 明沟东端出口
+      culvert: { x: DRAIN.soak.x, z0: -46.4, z1: -40, y0: -0.44, y1: -0.04 },
+      soak: { ...DRAIN.soak },
+      runs: BREW.map((s) => {
+        const eaveX = s.x0 - 0.5, ey = s.h, arm = DRAIN.pipeX < eaveX - 0.24;
+        return {
+          key: s.key, name: s.name, eaveX, eaveY: ey, z0: s.z0, z1: s.z1,
+          ridgeX: (s.x0 + s.x1) / 2, ridgeY: ey + s.rh,
+          gutter: {
+            x0: eaveX - 0.24, x1: eaveX + 0.48, y0: ey - 0.58, y1: ey - 0.42,
+            z0: s.z0 - 0.3, z1: s.z1 + 0.3,
+          },
+          arm: arm ? {
+            x0: DRAIN.pipeX - 0.16, x1: eaveX - 0.1, y0: ey - 0.58, y1: ey - 0.42,
+            z0: s.z0, z1: s.z0 + 0.3,
+          } : null,
+          spout: { x: DRAIN.pipeX, z: s.z0 + 0.15, y0: 0.24, y1: ey - 0.58 },
+        };
+      }),
+    },
   };
 }

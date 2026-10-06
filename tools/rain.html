@@ -77,9 +77,9 @@ const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
   new THREE.MeshStandardMaterial({ color: '#6d7360' }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true;
 ground.userData.outdoor = true;                          // 露天，落在这儿不算漏
-const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210),
   new THREE.MeshStandardMaterial({ color: '#7d7c76' }));
-plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20); plaza.receiveShadow = true;
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(6, -0.08, 10); plaza.receiveShadow = true;
 plaza.userData.outdoor = true;
 scene.add(ground, plaza);
 scene.add(buildCathedral().root);

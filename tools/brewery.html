@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>雨水的去向 · 回廊排水演示</title>
+<title>酿酒坊的水 · 大院排水演示</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #6b7480; font: 14px/1.65 system-ui, sans-serif; color: #eef3f8; }
   #ui { position: fixed; left: 12px; top: 12px; width: 300px; padding: 14px 16px; border-radius: 12px;
@@ -14,7 +14,7 @@
   #ui .row { display: flex; gap: 8px; margin-top: 10px; }
   #ui button { flex: 1; padding: 7px; border: 0; border-radius: 7px; background: #2f6ea8; color: #fff; font-size: 13px; cursor: pointer; }
   #ui button.off { background: #3a4753; color: #9fb0c0; }
-  #ui .chk { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12.5px; color: #d5e2ee; }
+  #ui .chk { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12px; color: #cbd8e4; }
   #stages { margin-top: 12px; border-top: 1px solid #ffffff22; padding-top: 8px; }
   #stages div { padding: 4px 6px; border-radius: 6px; font-size: 12.5px; color: #b9c6d2; cursor: pointer; }
   #stages div:hover { background: #ffffff14; color: #fff; }
@@ -26,17 +26,18 @@
 </style>
 
 <div id="ui">
-  <h1>雨水的去向</h1>
-  <div class="sub">大教堂回廊的雨水，一路怎么流、最后去哪</div>
+  <h1>酿酒坊的水</h1>
+  <div class="sub">六座酒坊的雨水，一路怎么收、怎么走、最后去哪</div>
   <div class="flow">
-    屋面 → <b>内檐沟</b> → <b>落水管</b>（四角）→ <b>明沟</b>（绕院一周）→<br>
-    <b>暗管</b>（穿过东翼地面）→ <b>渗井</b>（院外过道，渗入地下）
+    屋面（六座）→ <b>檐沟</b>（贴巷一面）→ <b>集水管</b>（找齐）→<br>
+    <b>落水管</b>（巷东缘一列）→ <b>明沟</b>（服务巷东缘，通长）→<br>
+    <b>暗管</b>（东端出口转入地下）→ <b>渗井</b>（渗入地下）
   </div>
   <label>雨量 <span id="lrn">中</span></label>
   <input id="rn" type="range" min="0" max="2600" value="1300">
   <label>流速 <span id="lv">1.0×</span></label>
   <input id="vs" type="range" min="0" max="30" value="10">
-  <div class="chk"><input id="xray" type="checkbox"><label for="xray" style="margin:0">透视墙体（看里面的管子）</label></div>
+  <div class="chk"><input id="xray" type="checkbox"><label for="xray" style="margin:0">透视墙体（看地下的暗管）</label></div>
   <div class="chk"><input id="lab" type="checkbox" checked><label for="lab" style="margin:0">显示标注</label></div>
   <button id="trace" style="width:100%;margin-top:10px;background:#1f6f47">▶ 看一滴水走完全程</button>
   <div class="row">
@@ -52,15 +53,17 @@
   { "imports": { "three": "../lib/three.module.js" } }
 </script>
 <script type="module">
-// 回廊排水演示：把 src/town.js 里那套"屋面→檐沟→落水管→明沟→暗管→渗井"的几何，
-// 用动画水滴走一遍，看清楚水到底怎么走、最后去哪儿。
-// 关键点来自 src/town.js 的 drainageInfo()，和真实模型同一份数据。
+// 酿酒坊大院排水演示：把 src/town.js 里那套"屋面→檐沟→集水管→落水管→明沟→暗管→渗井"
+// 的几何，用动画水滴走一遍，看清楚水到底怎么走、最后去哪儿。
+// 关键点来自 src/town.js 的 brewInfo().drain，和真实模型同一份数据（buildBreweryDrain）。
 import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { buildCathedral } from '../src/cathedral.js';
-import { drainageInfo } from '../src/town.js';
+import { brewInfo } from '../src/town.js';
+import { P } from '../src/params.js';
 
-const D = drainageInfo();
+const B = brewInfo();
+const D = B.drain;
 
 // ---------- 场景 ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -76,11 +79,20 @@ scene.background = new THREE.Color('#6b7480');
 scene.fog = new THREE.FogExp2('#6b7480', 0.0028);
 scene.add(new THREE.HemisphereLight('#b6c6d6', '#585a52', 1.15));
 const sun = new THREE.DirectionalLight('#d6dee6', 0.9);
-sun.position.set(70, 100, 40); sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
-sun.shadow.camera.top = 80; sun.shadow.camera.bottom = -60;
-sun.shadow.camera.near = 20; sun.shadow.camera.far = 300; sun.shadow.bias = -0.0006;
+sun.position.set(130, 110, 70);
+sun.target.position.set(66, 0, 12);   // 阴影相机对着大院（院子在 x≈56..76，离原点远）
+sun.castShadow = true;
+// 阴影视锥与主场景同一组数（params.js 的 P.shadow）：必须罩住整片领地
+// （院子 x≈76、z±78，教堂还在另一头），否则地面会出现一道"影子到此为止"的硬边界。
+// 校验：node tools/check-shadow.mjs
+{
+  const S = P.shadow;
+  sun.shadow.mapSize.set(S.map, S.map);
+  sun.shadow.camera.left = -S.H; sun.shadow.camera.right = S.H;
+  sun.shadow.camera.top = S.top; sun.shadow.camera.bottom = S.bottom;
+  sun.shadow.camera.near = S.near; sun.shadow.camera.far = S.far;
+  sun.shadow.bias = S.bias;
+}
 scene.add(sun, sun.target);
 
 const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48), new THREE.MeshStandardMaterial({ color: '#6d7360' }));
@@ -115,8 +127,7 @@ function applyXray() {
 }
 applyXray();
 
-// ---------- 排水路径（世界坐标，来自 drainageInfo）----------
-const { X0, X1, Z0, Z1, yIn, yOut, yGut, yChan, soak } = D;
+// ---------- 排水路径（世界坐标，来自 brewInfo().drain）----------
 class Flow {
   constructor(pts, speed) {
     this.pts = pts.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
@@ -135,29 +146,28 @@ class Flow {
 const flows = [];
 const add = (pts, speed) => flows.push(new Flow(pts, speed));
 
-// ① 屋面径流：外檐（高）→ 内檐（低），每面铺几条
-const n = 6, zA = 13.6, zB = 36.8, xA = 21.2, xB = 40.2;
-for (let k = 0; k < n; k++) {
-  const tz = zA + (zB - zA) * (k + 0.5) / n;
-  const tx = xA + (xB - xA) * (k + 0.5) / n;
-  add([[D.eaveOut.W, yOut + 0.32, tz], [D.eaveIn.W, yIn + 0.32, tz]], 1.5);
-  add([[D.eaveOut.E, yOut + 0.32, tz], [D.eaveIn.E, yIn + 0.32, tz]], 1.5);
-  add([[tx, yOut + 0.32, D.eaveOut.N], [tx, yIn + 0.32, D.eaveIn.N]], 1.5);
-  add([[tx, yOut + 0.32, D.eaveOut.S], [tx, yIn + 0.32, D.eaveIn.S]], 1.5);
+const gutY = (r) => (r.gutter.y0 + r.gutter.y1) / 2;
+for (const r of D.runs) {
+  // ① 屋面径流：脊（高）→ 贴巷的檐口（低），每座铺四条
+  for (let k = 0; k < 4; k++) {
+    const t = r.z0 + (r.z1 - r.z0) * (k + 0.5) / 4;
+    add([[r.ridgeX, r.ridgeY + 0.12, t], [r.eaveX + 0.35, r.eaveY + 0.06, t]], 1.6);
+  }
+  // ② 檐沟：水沿沟流向落水口（各座的落水口都在东端，z0 那头）
+  const gx = (r.gutter.x0 + r.gutter.x1) / 2, gy = gutY(r);
+  add([[gx, gy, r.gutter.z1 - 0.4], [gx, gy, r.spout.z]], 1.2);
+  // ③ 集水管：檐口深浅不一的，横一段把水引到巷边的落水管线上
+  if (r.arm) add([[gx, gy, r.spout.z], [D.pipeX, gy, r.spout.z]], 1.2);
+  // ④ 落水管：直落到明沟面上方
+  add([[D.pipeX, r.spout.y1 - 0.05, r.spout.z], [D.pipeX, r.spout.y0, r.spout.z]], 3.0);
+  // ⑤ 明沟：从落水口一路往东（z 递减）汇到出口
+  add([[D.pipeX, D.yChan, r.spout.z], [D.outlet.x, D.yChan, D.outlet.z]], 0.9);
 }
-// ② 檐沟：各面沟里的水朝出口方向流
-add([[X0, yGut, Z0], [X0, yGut, Z1]], 1.3);   // 西沟 → 南
-add([[X0, yGut, Z0], [X1, yGut, Z0]], 1.3);   // 北沟 → 东
-add([[X1, yGut, Z0], [X1, yGut, Z1]], 1.3);   // 东沟 → 南
-add([[X0, yGut, Z1], [X1, yGut, Z1]], 1.3);   // 南沟 → 东
-// ③ 落水管：四角直下
-for (const [cx, cz] of [[X0, Z0], [X1, Z0], [X1, Z1], [X0, Z1]]) add([[cx, yGut, cz], [cx, 0.16, cz]], 3.0);
-// ④ 明沟：各角沿沟汇到东南角（X1,Z1）
-add([[X0, yChan, Z0], [X1, yChan, Z0], [X1, yChan, Z1]], 0.9);
-add([[X1, yChan, Z0], [X1, yChan, Z1]], 0.9);
-add([[X0, yChan, Z1], [X1, yChan, Z1]], 0.9);
-// ⑤ 暗管 + 渗井
-add([[X1, yChan, Z1], [X1, -0.2, Z1], [soak.x, -0.2, soak.z], [soak.x, -0.5, soak.z]], 1.1);
+// ⑥ 暗管 + 渗井：从出口转到地下，终点渗入地下
+add([[D.outlet.x, D.yChan, D.outlet.z],
+     [D.culvert.x, (D.culvert.y0 + D.culvert.y1) / 2, D.culvert.z1 - 0.3],
+     [D.culvert.x, (D.culvert.y0 + D.culvert.y1) / 2, D.culvert.z0 + 0.3],
+     [D.soak.x, -0.5, D.soak.z]], 1.1);
 
 // ---------- 水滴（发光 Points）----------
 const PER = 16;
@@ -188,28 +198,33 @@ water.frustumCulled = false;
 scene.add(water);
 const _a = new THREE.Vector3();
 
-// ---------- 一滴水走完全程：高亮水滴沿整条水路走一遁，镜头跟着 ----------
-const zc = (Z0 + Z1) / 2;
+// ---------- 一滴水走完全程（拿煮酒房当样本）----------
+const BREW5 = D.runs.find((r) => r.key === 'brewhouse') || D.runs[0];
+const zm = (BREW5.z0 + BREW5.z1) / 2, bgy = gutY(BREW5);
 const TRACE_PTS = [
-  [D.eaveOut.W, yOut + 0.34, zc],   // 屋面外檐
-  [D.eaveIn.W, yIn + 0.34, zc],     // 屋面内檐
-  [X0, yGut, zc],                   // 内檐沟
-  [X0, yGut, Z1],                   // 檐沟到院角
-  [X0, yChan, Z1],                  // 落水管到底
-  [X1, yChan, Z1],                  // 明沟到出口角
-  [X1, -0.24, Z1],                  // 转暗管
-  [soak.x, -0.24, soak.z],          // 暗管到渗井
-  [soak.x, -0.55, soak.z],          // 渗井底
+  [BREW5.ridgeX, BREW5.ridgeY + 0.14, zm],      // 屋脊
+  [BREW5.eaveX + 0.35, BREW5.eaveY + 0.06, zm], // 檐口
+  [(BREW5.gutter.x0 + BREW5.gutter.x1) / 2, bgy, zm],        // 落进檐沟
+  [(BREW5.gutter.x0 + BREW5.gutter.x1) / 2, bgy, BREW5.spout.z],  // 沿沟到东端落水口
+  [D.pipeX, bgy, BREW5.spout.z],                // 集水管拐到巷边
+  [D.pipeX, BREW5.spout.y1, BREW5.spout.z],     // 落水管口
+  [D.pipeX, BREW5.spout.y0, BREW5.spout.z],     // 落到底
+  [D.pipeX, D.yChan, BREW5.spout.z],            // 进明沟
+  [D.outlet.x, D.yChan, D.outlet.z],            // 明沟往东到出口
+  [D.culvert.x, (D.culvert.y0 + D.culvert.y1) / 2, D.culvert.z1 - 0.3],   // 转暗管
+  [D.culvert.x, (D.culvert.y0 + D.culvert.y1) / 2, D.culvert.z0 + 0.3],   // 穿到渗井
+  [D.soak.x, -0.5, D.soak.z],                   // 渗井底
 ];
 const TRACE_CAP = [
-  '① 雨落在屋面：外檐高、内檐低，水顺坡往檐口走',
-  '② 越过檐口，落进内檐沟',
-  '③ 沿檐沟流向院角',
-  '④ 到院角，转入落水管往下',
-  '⑤ 落到底，进明沟',
-  '⑥ 明沟汇向东南出口角',
-  '⑦ 到出口角，转入暗管（涵洞），穿过东翼地面',
-  '⑧ 进渗井——水渗入地下，就是终点',
+  '① 雨落在煮酒房屋面：脊高檐低，水顺坡往贴巷的檐口走',
+  '② 越过檐口，落进檐沟',
+  '③ 沿檐沟流向东端的落水口',
+  '④ 转入集水管，横着找齐到巷边的落水管线（六座的檐口深浅不一样）',
+  '⑤ 进落水管，直落到地面',
+  '⑥ 落进服务巷东缘的明沟',
+  '⑦ 沿明沟一路往东',
+  '⑧ 到东端出口，转入暗管（涵洞），钻到地下',
+  '⑨ 暗管通到渗井——水渗入地下，就是终点',
 ];
 const traceFlow = new Flow(TRACE_PTS, 1);
 const traceCaption = (s) => {
@@ -221,7 +236,6 @@ const tracer = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, depthTes
 const traceGroup = new THREE.Group();
 traceGroup.visible = false;
 scene.add(traceGroup);
-// 小头 + 一串渐隐的尾点（彗星）：方向一眼看得出，又不糊屏
 tracer.scale.set(0.8, 0.8, 1);
 traceGroup.add(tracer);
 const TAIL = 7, TAIL_DS = 0.32;
@@ -234,10 +248,10 @@ for (let i = 1; i <= TAIL; i++) {
   traceGroup.add(sp); tail.push(sp);
 }
 let tracing = false, traceS = 0, lastCap = '';
-const TFOLLOW = new THREE.Vector3(8.5, 5, 8.5);
+const TFOLLOW = new THREE.Vector3(9, 5.5, 9);
 const _cam = new THREE.Vector3(), _b = new THREE.Vector3();
 
-// ---------- 雨 ----------
+// ---------- 雨（只往大院上头撒）----------
 const RN = 1500;
 const rainGeo = new THREE.BufferGeometry();
 const rainPos = new Float32Array(RN * 6);
@@ -246,14 +260,18 @@ const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color
 rain.frustumCulled = false;
 scene.add(rain);
 const rx = new Float32Array(RN), ry = new Float32Array(RN), rz = new Float32Array(RN);
-for (let i = 0; i < RN; i++) { rx[i] = GX0() + Math.random() * 44; rz[i] = 6 + Math.random() * 44; ry[i] = Math.random() * 26; }
-function GX0() { return 8; }
-function resetDrop(i) { rx[i] = 8 + Math.random() * 44; rz[i] = 6 + Math.random() * 44; ry[i] = 20 + Math.random() * 8; }
+const RBOX = { x0: 57, w: 19, z0: -34, d: 114 };
+for (let i = 0; i < RN; i++) resetDrop(i);
+function resetDrop(i) {
+  rx[i] = RBOX.x0 + Math.random() * RBOX.w;
+  rz[i] = RBOX.z0 + Math.random() * RBOX.d;
+  ry[i] = 20 + Math.random() * 8;
+}
 
 // ---------- 渗井里的水 ----------
-const pool = new THREE.Mesh(new THREE.CircleGeometry(0.58, 20),
+const pool = new THREE.Mesh(new THREE.CircleGeometry(0.56, 20),
   new THREE.MeshBasicMaterial({ color: '#5fb2e6', transparent: true, opacity: 0.55, depthWrite: false }));
-pool.rotation.x = -Math.PI / 2; pool.position.set(soak.x, 0.11, soak.z);
+pool.rotation.x = -Math.PI / 2; pool.position.set(D.soak.x, 0.11, D.soak.z);
 scene.add(pool);
 
 // ---------- 标注 ----------
@@ -272,31 +290,35 @@ function labelSprite(text) {
 const labelGroup = new THREE.Group();
 scene.add(labelGroup);
 const putLabel = (text, x, y, z) => { const s = labelSprite(text); s.position.set(x, y, z); labelGroup.add(s); };
-putLabel('① 屋面（外高内低）', (D.eaveIn.W + D.eaveOut.W) / 2, yOut + 0.9, 25);
-putLabel('② 内檐沟', D.eaveIn.W - 0.2, yGut + 0.7, 27);
-putLabel('③ 落水管（四角）', X1 + 0.2, 3.0, Z1 + 0.3);
-putLabel('④ 明沟（绕院）', (X0 + X1) / 2 - 1, 0.9, Z1 + 0.4);
-putLabel('⑤ 暗管', (X1 + soak.x) / 2, 0.6, Z1 + 0.2);
-putLabel('⑥ 渗井（终点）', soak.x, 1.6, Z1 + 0.6);
+putLabel('① 屋面（六座连排）', 68, 15.5, 40);
+putLabel('② 檐沟（贴巷一面）', 61.4, 9.8, 34);
+putLabel('③ 落水管（巷东缘一列）', 63.5, 6.5, 24);
+putLabel('④ 服务巷明沟', 61.4, 2.6, 6);
+putLabel('⑤ 暗管（地下）', 61.5, 2.2, -43);
+putLabel('⑥ 渗井（终点）', 61.5, 3.4, -47.5);
+for (const r of D.runs) {
+  const b = B.buildings.find((x) => x.key === r.key);
+  putLabel(b.name, r.ridgeX, r.ridgeY + 2.6, (r.z0 + r.z1) / 2);
+}
 
 // ---------- 相机 & 视角 ----------
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.2, 3000);
-camera.position.set(60, 26, 56);
+camera.position.set(30, 34, 56);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(31, 3, 26);
+controls.target.set(66, 5, 14);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxDistance = 300;
-const VIEW0 = { pos: [60, 26, 56], tgt: [31, 3, 26] };
+const VIEW0 = { pos: [30, 34, 56], tgt: [66, 5, 14] };
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
 const STAGES = [
-  ['① 屋面：外檐高、内檐低，水往檐口走', [14, 11, 42], [23, 5, 22], false],
-  ['② 内檐沟：一圈铅皮槽把水收住', [26, 7, 32], [23.2, 4.4, 20], true],
-  ['③ 落水管：四角引到地面', [43.5, 5, 29.5], [38.2, 2.6, 32.7], true],
-  ['④ 明沟：绕院一周汇向东南角', [33, 7, 32], [30, 1, 27], true],
-  ['⑤ 暗管：穿过东翼地面', [46, 3.5, 28], [43, 0.2, 32], true],
-  ['⑥ 渗井（终点）：水渗入地下', [50, 3.5, 27.5], [44.3, 0, 32.7], true],
+  ['① 屋面：六座连排，脊高檐低', [88, 36, 26], [66, 9, 24], false],
+  ['② 檐沟：贴巷一面的铅皮槽', [46, 13, 20], [63, 8, 16], false],
+  ['③ 落水管：巷东缘一列直落到地', [50, 7, 14], [62, 3.5, 9], false],
+  ['④ 明沟：服务巷东缘，通长一条', [46, 10, 44], [61.5, 0.5, 8], false],
+  ['⑤ 暗管：东端出口转入地下', [52, 5, -42], [61.5, -0.2, -44], true],
+  ['⑥ 渗井（终点）：水渗入地下', [55, 6, -40], [61.5, 0.1, -46], true],
 ];
 const stagesEl = document.getElementById('stages');
 for (const [name, p, t, xr] of STAGES) {
@@ -324,7 +346,7 @@ $('trace').onclick = () => {
   $('cap').style.display = tracing ? 'block' : 'none';
   if (tracing) {
     traceS = 0; lastCap = '';
-    xray = true; $('xray').checked = true; applyXray();   // 管子在地下，打开透视才看得见
+    xray = true; $('xray').checked = true; applyXray();   // 暗管在地下，打开透视才看得见
     controls.enabled = false;
   } else {
     controls.enabled = true;
@@ -339,7 +361,6 @@ function frame() {
   const t = clock.elapsedTime;
 
   if (!paused) {
-    // 水滴
     for (let i = 0; i < N; i++) {
       const f = flows[flowOf[i]];
       sArr[i] += f.speed * flowMul * 3 * dt;
@@ -348,7 +369,6 @@ function frame() {
       wpos[i * 3] = _a.x; wpos[i * 3 + 1] = _a.y; wpos[i * 3 + 2] = _a.z;
     }
     waterGeo.attributes.position.needsUpdate = true;
-    // 雨
     const nRain = +$('rn').value;
     for (let i = 0; i < RN; i++) {
       const o = i * 6;
@@ -386,7 +406,6 @@ function frame() {
     }
     const cap = traceCaption(s);
     if (cap !== lastCap) { $('cap').innerHTML = cap; lastCap = cap; }
-    // 镜头跟看这颗水滴
     _cam.copy(_a).add(TFOLLOW);
     const kf = 1 - Math.pow(0.002, dt);
     camera.position.lerp(_cam, kf);

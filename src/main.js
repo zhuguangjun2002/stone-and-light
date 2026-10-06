@@ -8,7 +8,7 @@ import { applyBakedColors, bakeableMeshes } from './bake.js';
 import { collectDoors, setDoorState, nextState, updateDoors, doorBlocks, STATE_NAMES } from './doors.js';
 import { buildGrid } from './grid.js';
 import { canvasTexture, mulberry32 } from './materials.js';
-import { P, recomputeDerived } from './params.js';
+import { P, recomputeDerived, sunPos } from './params.js';
 import { archApex } from './gothic.js';
 import { TOUR } from './tour.js';
 import { createWorksite } from './worksite.js';
@@ -40,11 +40,18 @@ const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff1da', 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
-sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -70;
-sun.shadow.camera.near = 20; sun.shadow.camera.far = 350;
-sun.shadow.bias = -0.0006;
+// 阴影正交相机：**必须罩住整片领地**，否则出了视锥的墙体直接没有影子、地面上会看到
+// 一道硬边界。新围墙（x 76 / z ±78）在斜阳时视空间要 ±150（x）/ ±110（y），早先的
+// ±110/(120,−70) 已经压线、全天有 133 处投影越界。这组数在 params.js 的 P.shadow，
+// 静态校验：node tools/check-shadow.mjs（0 处越界才算过）。
+{
+  const S = P.shadow;
+  sun.shadow.mapSize.set(S.map, S.map);
+  sun.shadow.camera.left = -S.H; sun.shadow.camera.right = S.H;
+  sun.shadow.camera.top = S.top; sun.shadow.camera.bottom = S.bottom;
+  sun.shadow.camera.near = S.near; sun.shadow.camera.far = S.far;
+  sun.shadow.bias = S.bias;
+}
 scene.add(sun, sun.target);
 // 室内那三盏点光是"没有间接光时的替身"。烘焙一旦生效就该调暗，否则会把烘出来的
 // 层次冲平（现在的又平又匀，就是它们照的）。
@@ -65,13 +72,7 @@ function setSunTime(t) {
   const slider = document.getElementById('sunT');
   if (slider && Number(slider.value) !== t) slider.value = t;
   const s = Math.sin(Math.PI * t);                       // 高度因子：正午 1，晨昏 0
-  const az = Math.PI * t;
-  const elev = THREE.MathUtils.degToRad(7 + 56 * s);
-  const R = 170;
-  sun.position.set(
-    R * Math.cos(elev) * Math.sin(az),
-    R * Math.sin(elev),
-    -R * Math.cos(elev) * Math.cos(az));
+  sunPos(t, sun.position);                               // 轨迹在 params.js，影子视锥按它校验
   sun.color.lerpColors(_c1.set('#ff9a4f'), _c2.set('#fff3dc'), s);
   sun.intensity = (1.0 + 1.5 * s) * WEATHER[weather].sun;
   hemi.intensity = (0.3 + 0.6 * s) * WEATHER[weather].hemi;
@@ -102,10 +103,10 @@ ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.2;    // 与广场拉开高差：两层水平面靠太近，远处会 z-fighting 闪烁
 ground.receiveShadow = true;
 scene.add(ground);
-const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210),
   new THREE.MeshStandardMaterial({ color: '#9b968b', roughness: 1 }));
 plaza.rotation.x = -Math.PI / 2;
-plaza.position.set(0, 0, 20);        // 与墙脚齐平（低于墙脚会在墙下露出一道缝）
+plaza.position.set(6, 0, 10);        // 与墙脚齐平（低于墙脚会在墙下露出一道缝）
 plaza.receiveShadow = true;
 scene.add(plaza);
 

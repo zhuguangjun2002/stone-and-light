@@ -18,9 +18,9 @@ self.onmessage = (e) => {
   const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
     new THREE.MeshStandardMaterial({ color: '#89906f' }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25;
-  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(110, 190),
+  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210),
     new THREE.MeshStandardMaterial({ color: '#9b968b' }));
-  plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -0.08, 20);
+  plaza.rotation.x = -Math.PI / 2; plaza.position.set(6, -0.08, 10);
   scene.add(ground, plaza);
   scene.updateMatrixWorld(true);
 
