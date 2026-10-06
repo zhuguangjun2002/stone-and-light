@@ -94,10 +94,39 @@ export function buildPerson() {
   nose.position.set(0, 1.485, -0.125);
   g.add(nose);
 
-  // 7) 双手从长袍袖口伸出
+  // 5a) 眼睛 + 里料下摆
   for (const s of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), M('#241f1a', 0.45));
+    eye.position.set(s * 0.042, 1.512, -0.118);
+    g.add(eye);
+  }
+  // 里料下摆 band（绕长袍最底部一小圈浅色内衬）
+  const hemPts = [new THREE.Vector2(0.303, 0.012), new THREE.Vector2(0.297, 0.07)];
+  const hem = new THREE.Mesh(new THREE.LatheGeometry(hemPts, 20), M('#d8c79e', 0.85));
+  g.add(hem);
+
+  // 7) 长袖袖子 + 袖口内衬 + 双手
+  const cuffMat = M('#d8c79e', 0.85);
+  for (const s of [-1, 1]) {
+    const a = new THREE.Vector3(s * 0.155, 1.19, 0.0);
+    const b = new THREE.Vector3(s * 0.125, 0.79, -0.14);
+    const dir = b.clone().sub(a);
+    const len = dir.length();
+    // 外袖（深色长袍）
+    const slv = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, len, 8), M(robeDark));
+    slv.position.addVectors(a, b).multiplyScalar(0.5);
+    slv.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    g.add(slv);
+    // 袖口那一段亮色内衬
+    const clen = 0.14;
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.078, clen, 8), cuffMat);
+    cuff.quaternion.copy(slv.quaternion);
+    const n = dir.clone().normalize();
+    cuff.position.copy(b).addScaledVector(n, -clen / 2);
+    g.add(cuff);
+    // 手
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), M(skin, 0.7));
-    hand.position.set(s * 0.12, 0.80, -0.155);
+    hand.position.copy(b).add(new THREE.Vector3(0, -0.03, -0.02));
     g.add(hand);
   }
 

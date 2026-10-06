@@ -8,6 +8,7 @@
 #   （-- 之后跟要保存的 glb 路径；缺省存 assets/monk.glb）
 # -------------------------------------------------------------------
 import bpy, math, os, sys
+from mathutils import Vector
 
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = argv[0] if argv else os.path.join(os.path.dirname(__file__), '..', 'assets', 'monk.glb')
@@ -149,11 +150,38 @@ nose.rotation_euler = (-math.pi / 2, 0, 0)
 nose.data.materials.append(skin_mat)
 for p in nose.data.polygons: p.use_smooth = True
 
-# 9) 双手
-sm('HandL', -0.12, 0.16, 0.80, 0.035, 1, 1, 1, skin_mat)
-sm('HandR', 0.12, 0.16, 0.80, 0.035, 1, 1, 1, skin_mat)
+# 9) 眼睛 + 里料下摆
+eyes_mat = make_mat('Eyes', '#241f1a', 0.45)
+liner_mat = make_mat('Lining', '#d8c79e', 0.85)
+sm('EyeL', -0.042, 0.118, 1.512, 0.011, 1, 0.7, 1, eyes_mat)
+sm('EyeR', 0.042, 0.118, 1.512, 0.011, 1, 0.7, 1, eyes_mat)
+hem = lathe('LiningBand', [(0.303, 0.012), (0.297, 0.07)], 20, mat=liner_mat)
 
-# 10) 脚
+# 10) 袖子 + 袖口内衬 + 双手
+def bone(name, a, b, r_a, r_b, mat):
+    va, vb = Vector(a), Vector(b)
+    v = vb - va
+    vv = v.normalized()
+    L = v.length
+    bpy.ops.mesh.primitive_cone_add(vertices=10, radius1=r_a, radius2=r_b, depth=L)
+    o = bpy.context.active_object
+    o.name = name; o.data.name = name
+    o.location = (va + vb) / 2
+    o.rotation_euler = v.to_track_quat('Z', 'Y').to_euler()
+    o.data.materials.append(mat)
+    for p in o.data.polygons:
+        p.use_smooth = True
+    return o
+for sx in [-1, 1]:
+    A = (sx * 0.155, 0.0, 1.19)
+    B = (sx * 0.125, 0.14, 0.79)
+    v = Vector(B) - Vector(A)
+    clen = 0.14
+    bone('Sleeve_%d' % sx, A, B, 0.052, 0.062, cape_mat)
+    bone('Cuff_%d' % sx, Vector(B) - v.normalized() * clen, B, 0.062, 0.078, liner_mat)
+    sm('Hand_%d' % sx, sx * 0.125, 0.16, 0.76, 0.04, 1, 1, 1, skin_mat)
+
+# 11) 脚
 sm('FootL', -0.09, 0.04, 0.05, 0.05, 0.8, 1.6, 0.4, make_mat('Foot', '#3a332a', 0.95))
 sm('FootR', 0.09, 0.04, 0.05, 0.05, 0.8, 1.6, 0.4, make_mat('Foot', '#3a332a', 0.95))
 
