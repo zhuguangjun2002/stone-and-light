@@ -1,6 +1,6 @@
-// 教堂领地（cathedral close / precinct）：围墙与门楼、回廊、教士住宅、墓地、市场。
-// 中世纪大教堂从来不是孤零零一座房子，它嵌在一片有围墙的"领地"里：南侧回廊是
-// 修士的日常动线，四周是教士住宅与墓地，西端前庭是集市。这里全部程序化生成，
+// 教堂领地（cathedral close / precinct）：回廊、教士住宅、墓地、市场、酿酒坊大院。
+// 中世纪大教堂从来不是孤零零一座房子，它嵌在一片"领地"里（2026-10 起领地不设围墙）：
+// 南侧回廊是修士的日常动线，四周是教士住宅与墓地，西端前庭是集市。这里全部程序化生成，
 // 无外部资源。
 //
 // 接入方式：本模块的 group 被 buildCathedral() 挂进 root，于是自动进入
@@ -14,13 +14,13 @@ import * as THREE from '../lib/three.module.js';
 import { wallWithOpenings, gableRoofGeometry, gableGeometry, makePinnacle, kForApex } from './gothic.js';
 import { mulberry32, pavingTexture } from './materials.js';
 
-// 领地围墙的四至（世界坐标；+x 南、-x 北、+z 西、-z 东）
-// 旧四至：南 / 北 / 东三面旧墙在扩建后降为"庭墙"，只隔不断院子、不再挡外敌。
+// 领地四至（世界坐标；+x 南、-x 北、+z 西、-z 东）。围墙于 2026-10 按用户要求整体拆除，
+// 四至仅作为院落布局坐标保留。
+// 旧四至：南 / 北 / 东三面旧墙在扩建后曾降为"庭墙"，现已连同外圈一并移除。
 const SX = 56, NX = -52, WZ = 78, EZ = -58;
 // 新四至：南扩 +20（南墙 56→76）、东扩 +20（东墙 -58→-78）、北扩 +12（北墙 -52→-64），
 // 西面不动。方案图：docs/expansion-plan.png（tools/expansion-plan.py 出图）。
 const SX2 = 76, NX2 = -64, EZ2 = -78;
-const WALL_H = 4.2, WALL_T = 0.85;
 
 // 门位（世界坐标）——建墙、画图、酿酒坊演示页共用同一组数
 const WAGON_Z = -35;    // 粮车门：新南墙与旧南墙各一道，粮车从这里进院
@@ -69,7 +69,7 @@ function townMaterials() {
   };
   const paveTex = pavingTexture();   // 无 DOM 时为 null，退回纯色
   return {
-    wall: M('#c4b9a1'),        // 领地围墙
+    wall: M('#c4b9a1'),        // 院内建筑墙
     wallDark: M('#a2957c'),
     plaster: M('#d8c9a8'),     // 抹灰墙面
     timber: M('#5a4128', 0.85),// 木构架
@@ -101,112 +101,6 @@ function solid(geo, mat, x, y, z, ry = 0) {
   m.castShadow = m.receiveShadow = true;
   m.userData.buildSkip = true;
   return m;
-}
-
-// 墙头收口：压顶石 + 垤口。沿墙方向用世界坐标给（alongX 表示墙沿 x 延伸，否则沿 z）。
-function wallTop(g, mats, { alongX, cx, cz, len, wallH, wallT, gaps = [] }) {
-  const copeH = 0.16, copeD = wallT + 0.28;
-  g.add(solid(new THREE.BoxGeometry(alongX ? len : copeD, copeH, alongX ? copeD : len), mats.wallDark,
-    cx, wallH + copeH / 2 + 0.01, cz));
-  const mw = 1.05, mh = 0.62, pitch = 2.0, md = wallT + 0.05;   // 齿略宽于缺口，才像垤口不像掉牙
-  for (let t = -len / 2 + mw / 2; t <= len / 2 - mw / 2; t += pitch) {
-    const wp = alongX ? cx + t : cz + t;                 // 沿墙方向的世界坐标，用于跳开门洞/门楼
-    if (gaps.some(([a, b]) => wp > a && wp < b)) continue;
-    g.add(solid(new THREE.BoxGeometry(alongX ? mw : md, mh, alongX ? md : mw), mats.wall,
-      alongX ? cx + t : cx, wallH + copeH + mh / 2 + 0.01, alongX ? cz : cz + t));
-  }
-}
-
-// 通行缺口（门洞）：给局部中心、半宽 a、起拱高，按墙高反解尖拱 k。
-// k = kForApex(a, 拱高)；拱高取"墙高压顶之下"与 a*1.3 的较小者——
-// 太尖会戳出墙头，太矮又不像哥特；a > 墙高 - 起拱高 - 0.25 时 k 会被压到 0.5（半圆券），
-// 所以宽门洞的起拱高要给足。
-function gate(cx, a, wallH, springY = 0.9) {
-  const apex = Math.min(wallH - springY - 0.25, a * 1.3);
-  return { cx, a, y0: 0, springY, k: Math.max(0.5, kForApex(a, apex)) };
-}
-
-// 领地围墙：
-//   · 外圈新墙四面（西墙加长到新四至，西正门门楼原样保留）
-//   · 旧南 / 东 / 北三面墙降为庭墙，只隔院子，留出一串通行缺口
-//   · 四角塔（旧四角 + 新四角）
-// 各墙压顶高度彼此差几厘米，避免转角处共面打架。
-function buildWalls(mats) {
-  const g = new THREE.Group();
-
-  // ---------- 外圈新墙 ----------
-  const spanX = SX2 - NX2, cx = (SX2 + NX2) / 2;   // 140 / 6
-  const spanZ = WZ - EZ2, cz = (WZ + EZ2) / 2;     // 156 / 0
-  // 西墙（正门在 x = 0；门楼见下）
-  g.add(solid(wallWithOpenings(spanX, 0, WALL_H, WALL_T,
-    [{ cx: -cx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 }]), mats.wall, cx, 0, WZ));
-  // 新东墙（殡门在 x = 0）
-  g.add(solid(wallWithOpenings(spanX, 0, WALL_H + 0.02, WALL_T,
-    [{ cx: FUNERAL_X - cx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 }]), mats.wallDark, cx, 0, EZ2));
-  // 新南墙 + 粮车门（绕 y 转 90° 后局部 x = cz - 世界 z）
-  g.add(solid(wallWithOpenings(spanZ, 0, WALL_H - 0.03, WALL_T,
-    [gate(cz - WAGON_Z, 2.6, WALL_H - 0.03)]), mats.wall, SX2, 0, cz, Math.PI / 2));
-  // 新北墙 + 便门（世界 z = -20）
-  g.add(solid(wallWithOpenings(spanZ, 0, WALL_H + 0.05, WALL_T,
-    [{ cx: cz - WICKET_Z, a: 1.0, y0: 0, springY: 1.0, k: 1.0 }]), mats.wallDark, NX2, 0, cz, Math.PI / 2));
-
-  // ---------- 旧墙降为庭墙 ----------
-  const oSpanZ = WZ - EZ, oCz = (WZ + EZ) / 2;     // 136 / 10
-  const oSpanX = SX - NX, oCx = (SX + NX) / 2;     // 108 / 2
-  // 旧南墙（x = SX）：粮车门、便门、庭门（回廊一侧）、以及通向东扩带的缺口
-  g.add(solid(wallWithOpenings(oSpanZ, 0, WALL_H - 0.06, WALL_T,
-    [gate(oCz - WAGON_Z, 2.6, WALL_H - 0.06),
-     { cx: oCz - 20, a: 1.0, y0: 0, springY: 1.0, k: 1.0 },
-     gate(oCz - 26, 2.0, WALL_H - 0.06, 0.8),
-     gate(oCz - 68, 2.0, WALL_H - 0.06, 0.8)]), mats.wallDark, SX, 0, oCz, Math.PI / 2));
-  // 旧东墙（z = EZ）：殡门 + 两处缺口（送葬环道 / 南侧土路）
-  g.add(solid(wallWithOpenings(oSpanX, 0, WALL_H + 0.08, WALL_T,
-    [{ cx: FUNERAL_X - oCx, a: 1.7, y0: 0, springY: 1.25, k: 1.0 },
-     gate(-40 - oCx, 2.0, WALL_H + 0.08, 0.8),
-     gate(22 - oCx, 2.0, WALL_H + 0.08, 0.8)]), mats.wallDark, oCx, 0, EZ));
-  // 旧北墙（x = NX）：便门 + 通向草药圃的缺口
-  g.add(solid(wallWithOpenings(oSpanZ, 0, WALL_H - 0.1, WALL_T,
-    [{ cx: oCz - WICKET_Z, a: 1.0, y0: 0, springY: 1.0, k: 1.0 },
-     gate(oCz - 4, 2.0, WALL_H - 0.1, 0.8)]), mats.wallDark, NX, 0, oCz, Math.PI / 2));
-
-  // 西正门门楼：一整个带尖拱门洞的楼体，上覆双坡顶，四角小尖塔
-  const GH_W = 10.5, GH_D = 5.2, GH_H = 8.6;
-  g.add(solid(wallWithOpenings(GH_W, 0, GH_H, GH_D,
-    [{ cx: 0, a: 1.5, y0: 0, springY: 1.45, k: 1.0 }]), mats.wall, 0, 0, WZ));
-  const ghRoof = new THREE.Mesh(gableRoofGeometry(GH_D / 2 + 0.4, GH_H, GH_H + 2.2, GH_W + 0.6), mats.slate);
-  ghRoof.rotation.y = Math.PI / 2;
-  ghRoof.position.set(0, 0, WZ);
-  ghRoof.castShadow = ghRoof.receiveShadow = true;
-  ghRoof.userData.buildSkip = true;
-  g.add(ghRoof);
-  for (const sx of [1, -1]) for (const sz of [1, -1]) {
-    const pin = makePinnacle(mats.wallDark, 1.1);
-    pin.position.set(sx * (GH_W / 2 - 0.7), GH_H, WZ + sz * (GH_D / 2 - 0.7));
-    pin.traverse((o) => { if (o.isMesh) o.userData.buildSkip = true; });
-    g.add(pin);
-  }
-
-  // 墙头收口：压顶石 + 垤口（gaps 一律是世界坐标），四角小塔楼
-  wallTop(g, mats, { alongX: true,  cx,      cz: WZ,  len: spanX, wallH: WALL_H,          wallT: WALL_T, gaps: [[-5.6, 5.6]] });
-  wallTop(g, mats, { alongX: true,  cx,      cz: EZ2, len: spanX, wallH: WALL_H + 0.02,   wallT: WALL_T, gaps: [[FUNERAL_X - 2.6, FUNERAL_X + 2.6]] });
-  wallTop(g, mats, { alongX: false, cx: SX2, cz,      len: spanZ, wallH: WALL_H - 0.03,   wallT: WALL_T, gaps: [[WAGON_Z - 3.6, WAGON_Z + 3.6]] });
-  wallTop(g, mats, { alongX: false, cx: NX2, cz,      len: spanZ, wallH: WALL_H + 0.05,   wallT: WALL_T, gaps: [[-21.5, -18.5]] });
-  wallTop(g, mats, { alongX: false, cx: SX,  cz: oCz, len: oSpanZ, wallH: WALL_H - 0.06,  wallT: WALL_T,
-    gaps: [[WAGON_Z - 3.6, WAGON_Z + 3.6], [18.5, 21.5], [24, 28], [66, 70]] });
-  wallTop(g, mats, { alongX: true,  cx: oCx, cz: EZ,  len: oSpanX, wallH: WALL_H + 0.08,  wallT: WALL_T,
-    gaps: [[-2.2, 2.2], [-42, -38], [20, 24]] });
-  wallTop(g, mats, { alongX: false, cx: NX,  cz: oCz, len: oSpanZ, wallH: WALL_H - 0.1,   wallT: WALL_T,
-    gaps: [[-21.5, -18.5], [2, 6]] });
-  const cornerH = WALL_H + 1.0;
-  for (const [tx, tz] of [[SX2, WZ], [SX2, EZ2], [NX2, WZ], [NX2, EZ2],
-                          [SX, WZ], [SX, EZ], [NX, WZ], [NX, EZ]]) {
-    g.add(solid(new THREE.BoxGeometry(1.1, cornerH, 1.1), mats.wallDark, tx, cornerH / 2, tz));
-    const pin = makePinnacle(mats.wall, 0.8);
-    pin.position.set(tx, cornerH, tz);
-    pin.traverse((o) => { if (o.isMesh) o.userData.buildSkip = true; });
-    g.add(pin);
-  }
-  return g;
 }
 
 // 酒坊单体：墙身 + 两片坡板屋面（脊沿 z）+ 山墙 + 西面的大门。
@@ -745,9 +639,8 @@ export function buildTown(labels = []) {
   const rnd = mulberry32(20260910);
   const root = new THREE.Group();
 
-  root.add(buildWalls(mats));
   root.add(buildGround(mats));
-  // 围墙之外是田野，别让灰色广场一直铺到天边（广场是主场景里铺好的，这里只盖外面）
+  // 领地之外是田野，别让灰色广场一直铺到天边（广场是主场景里铺好的，这里只盖外面）
   const outerGrass = (w, d, x, z) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mats.grass);
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.03, z);
@@ -767,7 +660,6 @@ export function buildTown(labels = []) {
   root.add(buildTrees(mats, rnd));
 
   labels.push({ text: '回廊（修士的日常动线）', pos: [30.7, 7.5, 25.2], scope: 'out' });
-  labels.push({ text: '教堂领地围墙', pos: [0, 6.5, WZ], scope: 'out' });
   labels.push({ text: '北侧墓地', pos: [-32, 3, 0], scope: 'out' });
   labels.push({ text: '西前庭集市', pos: [13, 6, 66], scope: 'out' });
   labels.push({ text: '酿酒坊大院', pos: [59, 12, 20], scope: 'out' });
@@ -800,7 +692,7 @@ export function drainageInfo() {
 }
 
 // 酿酒坊演示页（tools/brewery.html）与酿酒排水校验用：把大院的几何算出来，
-// 与 buildBrewery / buildWalls 同源同一组常量，改一处两边一起变。
+// 与 buildBrewery 同源同一组常量，改一处两边一起变。
 export function brewInfo() {
   return {
     // 领地四至（新 / 旧）

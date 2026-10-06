@@ -22,7 +22,7 @@ export function buildCathedral() {
   const glassMats = makeGlassMaterials(P.glazing);
   const root = new THREE.Group();
   const labels = [];
-  // 领地（close）：围墙、回廊、教士住宅、墓地、市场。先把镇子摆好，教堂在它里面盖起来。
+  // 领地（close）：回廊、教士住宅、墓地、市场、酿酒坊大院（院墙已拆除）。先把镇子摆好，教堂在它里面盖起来。
   root.add(buildTown(labels));
   const vaultMats = { web: new THREE.MeshStandardMaterial({ color: '#ded5c2', roughness: 0.95, side: THREE.DoubleSide }), rib: mats.stoneDark };
 

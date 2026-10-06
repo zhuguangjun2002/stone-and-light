@@ -40,8 +40,8 @@ const hemi = new THREE.HemisphereLight('#cfe0f5', '#6d6a5b', 0.85);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff1da', 2.4);
 sun.castShadow = true;
-// 阴影正交相机：**必须罩住整片领地**，否则出了视锥的墙体直接没有影子、地面上会看到
-// 一道硬边界。新围墙（x 76 / z ±78）在斜阳时视空间要 ±150（x）/ ±110（y），早先的
+// 阴影正交相机：**必须罩住整片领地**，否则出了视锥的建筑直接没有影子、地面上会看到
+// 一道硬边界。新领地四至（x 76 / z ±78）在斜阳时视空间要 ±150（x）/ ±110（y），早先的
 // ±110/(120,−70) 已经压线、全天有 133 处投影越界。这组数在 params.js 的 P.shadow，
 // 静态校验：node tools/check-shadow.mjs（0 处越界才算过）。
 {

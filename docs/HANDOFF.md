@@ -12,9 +12,9 @@
 - y 向上；中厅轴线沿 **z**，西立面在 **+z**，后殿在 **−z**；**+x 南**、−x 北。
 - 参数集中在 `src/params.js` 的 `P`，派生量在 `recomputeDerived()`：
   `aisleOut=13.2`、`outerX=14.2`（侧廊外墙外皮）、`naveZ0=6`、`naveZ1=48`、`choirZ1=-27`。
-- 领地四至（`src/town.js` 常量）：**新围墙** 南 `SX2=76`、北 `NX2=-64`、西 `WZ=78`、东 `EZ2=-78`；
-  **原围墙**（`SX=56`/`NX=-52`/`EZ=-58`）降级成院内庭墙；墙高 `WALL_H=4.2`。
-- 服务巷 `LANE`（x 57.5–61.5 / z −40–76）贴着旧南墙与酒坊；酿酒坊大院六座建筑见 `BREW`。
+- 领地四至（`src/town.js` 常量）：南 `SX2=76`、北 `NX2=-64`、西 `WZ=78`、东 `EZ2=-78`
+  （`SX=56`/`NX=-52`/`EZ=-58` 为旧四至）；**院墙与门楼/角塔已于 2026-10 整体移除**，四至仅作院落坐标。
+- 服务巷 `LANE`（x 57.5–61.5 / z −40–76）位于酒坊正前；酿酒坊大院六座建筑见 `BREW`。
 - 回廊（`CLO`）：`x0=18.5`、`z0=13`、内院 `garth=16`、敞廊进深 `depth=4.2`。
   回廊西缘与南侧扶壁墩（最远 x≈15.9）之间留 ~2.6 m 过道；东缘（x=42.9）与南墙住宅前脸
   （最浅 x≈45.4）之间也宽出 ~2.5 m——东西两侧的过道差不多宽。
@@ -24,7 +24,7 @@
 | 文件 | 职责 |
 |---|---|
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
-| `src/town.js` | 领地：双圈围墙+门楼（压顶石/垛口/八角小塔楼）、回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 六建筑 + 服务巷 + 院子排水 `buildBreweryDrain`）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
+| `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 六建筑 + 服务巷 + 院子排水 `buildBreweryDrain`）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
 | `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
@@ -44,13 +44,13 @@
 ## 检查器基线（当前全绿）
 
 ```bash
-node test/smoke.mjs                 # 2948 网格（bbox −69..81 / −122..126），通过
+node test/smoke.mjs                 # 2437 网格（bbox −69..81 / −122..126），通过
 node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处
 node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7，exit 0
 node tools/check-brew.mjs           # 酿酒坊水路 7/7（屋面 30/30 + 30/30），exit 0
 node tools/check-poke.mjs           # 49 机位 0 处穿刺（按 userData.town 跳过领地）
-node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（合计 3547 px），exit 0
-                                    # 后端自报一行；--swiftshader → 3501 px 可移植基线
+node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（合计 3507 px），exit 0
+                                    # 后端自报一行；--swiftshader → 3481 px 可移植基线
 node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太阳走一天 48 档）
 ```
 
@@ -59,7 +59,8 @@ node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太�
 ### 本轮：酿酒坊大院（未提交前先跑全量检查）
 
 - **扩地**：南 +20（`SX 56→76`）、东 +20（`EZ −58→−78`）、北 +12（`NX −52→−64`），西不动；
-  原围墙降级为院内庭墙，新旧墙压顶高度错开 0.02–0.1 m 避共面；8 座角塔；新四至常量 `SX2/NX2/EZ2`。
+  原围墙降级为院内庭墙、立起双圈围墙（压顶高度错开 0.02–0.1 m 避共面，8 座角塔）——
+  这套院墙已于 2026-10 整体移除；新四至常量 `SX2/NX2/EZ2` 保留作院落坐标。
   方案图 `tools/expansion-plan.py` → `docs/expansion-plan.png`（东排住宅 −17 → **−18.5**，树 `[48,30]` → `[66,-50]`）。
 - **酿酒坊**（`BREW` 六建筑，z 东→西）：粮仓 → 烘干窑 → 麦芽楼 → 煮酒房 → 冷却·发酵 → 酒窖酒肆；
   服务巷 `LANE`、院坝水井、酒桶、酒花架/菜园药圃、墓园扩展、东排住宅外移（`EAST_HOUSE_X`）。
@@ -84,8 +85,8 @@ node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太�
   一份，**默认走本机 MX230**（ANGLE→Vulkan；`check-flicker` 全扫 24.6 s → 5.3 s，4.6×），
   `--swiftshader` / `CHROME_SW=1` 退回软渲染以复现跨机器基线；没显卡时 Chrome 自动回落，
   链路不会断。**Intel 核显别选**：强制走它 56 ms/帧，比软渲 45 ms/帧还慢。
-  `check-flicker` 开头自报一行"渲染后端"。基线：MX230 **3547 px**（连跑三次同一串数字）、
-  软渲 3501 px，两者均 exit 0；`check-poke` 在 GPU 下仍 0 穿刺。
+  `check-flicker` 开头自报一行"渲染后端"。基线：MX230 **3507 px**（连跑三次同一串数字）、
+  软渲 3481 px，两者均 exit 0；`check-poke` 在 GPU 下仍 0 穿刺。
 
 ### 上一轮（都已在 `main`）
 
@@ -96,11 +97,11 @@ node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太�
   构件带 `userData.drain` 标签，坐标由 `drainageInfo()` 导出
 - `tools/drainage.html` 排水演示页：动画水滴 + 「一滴水走完全程」追踪（小号青色彗星、镜头跟随）
 - `check-rain.mjs` 扫完漏点后做 **7 项排水通路正向校验**（屋面→檐沟→落水管→明沟→暗管→渗井）
-- 集市摊棚：货台改成真桌子、布篷改前倾且柱头顶篷；垛口（齿 1.05 / 缺口 0.95 / 高 0.62 m）
+- 集市摊棚：货台改成真桌子、布篷改前倾且柱头顶篷。
 - 后殿东侧土院铺满整个东端；`docs/` 里无人引用的孤儿图已删
 - 导览影片 `docs/tour.mp4` 重录（领地入镜，138 s）
 
-还想继续的话：垛口疏密、院内土院/草地比例的进一步口味调；或参考 `tools/drainage.html`
+还想继续的话：院内土院/草地比例的进一步口味调；或参考 `tools/drainage.html`
 给排水加更多真实细节（如明沟→沉淀井、雨水回用）。
 
 ## 关于看效果
