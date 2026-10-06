@@ -40,6 +40,13 @@ python3 -m http.server 8123
 暗管 → 渗井」，顺便给六座建筑挂上名字标注。坐标来自 `brewInfo().drain`，与
 `buildBreweryDrain()` 同源。
 
+**人物自检页**：`tools/monk.html`（<http://localhost:8123/tools/monk.html>）。
+把行走模式里那位第三人称替身站到一个铺石板的院落里，正/侧/背/全身/四分之三多角度
+的机位，并可以切成 `assets/monk.glb`（Blender 无头脚本 `tools/generate_monk.py`
+生成的同一款修士），左右按键即时对比：
+
+    blender --background --python tools/generate_monk.py -- assets/monk.glb
+
 ## 操作
 
 | 按键 | 功能 |

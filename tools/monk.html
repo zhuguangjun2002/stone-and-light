@@ -1,0 +1,117 @@
+<!doctype html><meta charset="utf-8"><title>修士自检</title>
+<style>html,body{margin:0;overflow:hidden;background:#c8cdd8}canvas{display:block}
+#bar{position:fixed;top:8px;left:8px;display:flex;gap:6px;font:12px/sans-serif}
+#bar u{background:#0008;color:#eee;padding:6px 10px;border-radius:6px;cursor:pointer;text-decoration:none}
+#bar u:hover{background:#000c}</style>
+<div id="bar">
+  <u data-v="front">正面</u><u data-v="side">侧面</u><u data-v="back">背面</u>
+  <u data-v="full">全身</u><u data-v="pose34">四分之三</u>
+  <u id="spin">环绕</u><u id="swap">换成 Blender 版</u>
+</div>
+<script type="module">
+// 第三人称替身的检验页：一位 ~1.7 m 的修士站在铺石板上，正侧后多个机位，
+// 可切换到 Blender 生成的 monk.glb（程序化版与 Blender 版并存对比）。
+import * as THREE from '../lib/three.module.js';
+import { buildPerson } from '../src/person.js';
+import { pavingTexture } from '../src/materials.js';
+
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(1280, 720); r.setPixelRatio(1); r.shadowMap.enabled = true;
+r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#ccd2dc');
+scene.add(new THREE.HemisphereLight('#d5e2f2', '#6d6a5b', 1.15));
+const sun = new THREE.DirectionalLight('#fff1da', 2.4);
+sun.position.set(-4, 9, -8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -14; sun.shadow.camera.right = 14;
+sun.shadow.camera.top = 14; sun.shadow.camera.bottom = -14;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 60;
+scene.add(sun, sun.target);
+
+// 铺石板地面（与教堂院子同一张 procedural 铺地贴图）
+const tile = pavingTexture('#c8bd9e', 7);
+tile.wrapS = tile.wrapT = THREE.RepeatWrapping;
+tile.repeat.set(3, 3);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(18, 18),
+  new THREE.MeshStandardMaterial({ map: tile, roughness: 0.92 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+scene.add(ground);
+
+// 比例尺：高 1.7 m 的绿杆
+const pole = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.7, 0.05),
+  new THREE.MeshStandardMaterial({ color: '#2e8b57', roughness: 0.7 }));
+pole.position.set(-0.62, 0.85, 0); pole.castShadow = true;
+scene.add(pole);
+
+// 程序化版替身（默认显示）
+const person = buildPerson();
+person.visible = true;
+scene.add(person);
+
+let blenderVer = null;
+async function ensureBlender() {
+  if (blenderVer) return blenderVer;
+  const { GLTFLoader } = await import('../lib/GLTFLoader.js');
+  const loader = new GLTFLoader();
+  blenderVer = await new Promise((resolve, reject) =>
+    loader.load('/assets/monk.glb', g => resolve(g.scene), undefined, reject));
+  blenderVer.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  blenderVer.visible = false;
+  scene.add(blenderVer);
+  return blenderVer;
+}
+
+const camera = new THREE.PerspectiveCamera(40, 1280 / 720, 0.2, 200);
+const VIEWS = {
+  front:  { pos: [0, 1.12, -3.6], look: [0, 1.02, 0] },
+  side:   { pos: [-3.6, 1.12, 0], look: [0, 0.98, 0] },
+  back:   { pos: [0, 1.12, 3.6], look: [0, 1.02, 0] },
+  pose34: { pos: [-2.6, 1.62, -2.6], look: [0, 0.98, 0] },
+  full:   { pos: [0, 1.3, -4.6], look: [0, 0.85, 0] },
+};
+function render() { r.render(scene, camera); }
+window.__view = (name) => {
+  const v = VIEWS[name] || VIEWS.front;
+  camera.position.set(...v.pos); camera.lookAt(...v.look); render();
+};
+window.__loadBlender = (on) => ensureBlender().then(() => {
+  blenderVer.visible = !!on;
+  person.visible = !on;
+  render();
+});
+window.__ready = true;
+
+let spinTimer = 0;
+window.__setSpin = (on) => {
+  if (on) {
+    if (spinTimer) return;
+    let a = 0;
+    spinTimer = setInterval(() => {
+      a += 0.08;
+      camera.position.set(Math.sin(a) * 4.4, 1.35, Math.cos(a) * 4.4);
+      camera.lookAt(0, 0.9, 0);
+      render();
+    }, 120);
+  } else { clearInterval(spinTimer); spinTimer = 0; }
+};
+
+document.querySelectorAll('#bar u[data-v]').forEach((el) => {
+  el.onclick = () => window.__view(el.dataset.v);
+});
+let blenderOn = false;
+document.getElementById('swap').onclick = async (e) => {
+  blenderOn = !blenderOn;
+  await window.__loadBlender(blenderOn);
+  e.target.textContent = blenderOn ? '换回程序化版' : '换成 Blender 版';
+};
+document.getElementById('spin').onclick = (e) => {
+  const on = !spinTimer;
+  window.__setSpin(on);
+  e.target.textContent = on ? '停止环绕' : '环绕';
+};
+
+window.__view('front');
+</script>
