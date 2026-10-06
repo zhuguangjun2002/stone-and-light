@@ -11,7 +11,7 @@
 // 后者让建造动画把镇子排除在外（教堂是在既有的镇子里盖起来的）。
 
 import * as THREE from '../lib/three.module.js';
-import { wallWithOpenings, gableRoofGeometry, gableGeometry, makePinnacle, kForApex } from './gothic.js';
+import { wallWithOpenings, gableRoofGeometry, gableGeometry } from './gothic.js';
 import { mulberry32, pavingTexture } from './materials.js';
 
 // 领地四至（世界坐标；+x 南、-x 北、+z 西、-z 东）。围墙于 2026-10 按用户要求整体拆除，
