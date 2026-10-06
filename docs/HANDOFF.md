@@ -29,7 +29,7 @@
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 六个检查器（含 `check-brew.mjs` / `check-shadow.mjs`）+ 取景页（shot.html / shoot.mjs）+ 两个水路演示（drainage.html / **brewery.html**）+ 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（`CHROME_GPU=1` 切本机显卡）|
+| `tools/` | 六个检查器（含 `check-brew.mjs` / `check-shadow.mjs`）+ 取景页（shot.html / shoot.mjs）+ 两个水路演示（drainage.html / **brewery.html**）+ 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）|
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
@@ -49,7 +49,8 @@ node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处
 node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7，exit 0
 node tools/check-brew.mjs           # 酿酒坊水路 7/7（屋面 30/30 + 30/30），exit 0
 node tools/check-poke.mjs           # 49 机位 0 处穿刺（按 userData.town 跳过领地）
-node tools/check-flicker.mjs        # 外观 0.02–0.18%、剖面 ≤0.32%（合计 3501 px），exit 0
+node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（合计 3547 px），exit 0
+                                    # 后端自报一行；--swiftshader → 3501 px 可移植基线
 node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太阳走一天 48 档）
 ```
 
@@ -80,10 +81,11 @@ node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太�
   `P.shadow`，`shot.html` 的 `__sunAt` 也改用 `sunPos()`；`rain.html`/`drainage.html`
   是刻意收紧的近景机位，不改。接上后在 `t=0.30` / `t=0.65` 两档重拍，无硬边界。
 - **渲染后端统一**（`tools/chrome-args.mjs`）：取景/检查四工具的 Chrome 启动参数收成
-  一份，默认 **SwiftShader**（基线跨机器可复现）；本机 `CHROME_GPU=1` 走 **MX230**
-  （ANGLE→Vulkan）——`check-flicker` 全扫 **24.6 s → 5.3 s，快 4.6 倍**；**Intel 核显
-  56 ms/帧反而比软渲 45 ms/帧还慢**，别选。真 GPU 像素略有出入（合计 3547 vs 3501），
-  只用于看图/录片。flicker 基线随阴影改动 3496 → **3501**，两后端均 exit 0。
+  一份，**默认走本机 MX230**（ANGLE→Vulkan；`check-flicker` 全扫 24.6 s → 5.3 s，4.6×），
+  `--swiftshader` / `CHROME_SW=1` 退回软渲染以复现跨机器基线；没显卡时 Chrome 自动回落，
+  链路不会断。**Intel 核显别选**：强制走它 56 ms/帧，比软渲 45 ms/帧还慢。
+  `check-flicker` 开头自报一行"渲染后端"。基线：MX230 **3547 px**（连跑三次同一串数字）、
+  软渲 3501 px，两者均 exit 0；`check-poke` 在 GPU 下仍 0 穿刺。
 
 ### 上一轮（都已在 `main`）
 

@@ -45,7 +45,7 @@ const server = http.createServer((req, res) => {
   });
 }).listen(PORT);
 
-// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader，CHROME_GPU=1 走本机显卡。
+// 渲染后端见 tools/chrome-args.mjs：默认本机 MX230，--swiftshader 退回软渲染。
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,

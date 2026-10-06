@@ -53,8 +53,8 @@ const server = http.createServer((req, res) => {
 }).listen(PORT);
 
 fs.mkdirSync(OUT, { recursive: true });
-// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader（基线跨机器可复现），
-// CHROME_GPU=1 改走本机显卡（快约 25%，但基线会变，只用于看图）。
+// 渲染后端见 tools/chrome-args.mjs：默认本机 MX230（比软渲快 4.6×），
+// `--swiftshader` 退回软渲染复现跨机器基线——下面记的数字是 MX230 跑出来的。
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
@@ -67,6 +67,15 @@ page.on('pageerror', (e) => console.error('PAGE ERR:', e.message));
 await page.goto(`http://localhost:${PORT}/tools/flicker.html`, { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction('window.__ready === true', { timeout: 180000 });
 if (arg('doorstate')) await page.evaluate((st) => window.__doors(st), arg('doorstate'));
+
+// 自报渲染后端：本行下面那套基线是哪块卡跑出来的看这里——换后端数字会变（见 README）。
+console.log('渲染后端：' + await page.evaluate(() => {
+  const c = document.querySelector('canvas');
+  const gl = c && (c.getContext('webgl2') || c.getContext('webgl'));
+  if (!gl) return '拿不到 WebGL 上下文';
+  const d = gl.getExtension('WEBGL_debug_renderer_info');
+  return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : String(gl.getParameter(gl.RENDERER));
+}));
 
 const probeAt = arg('probe') ? arg('probe').split(',').map(Number) : null;
 let grand = 0;

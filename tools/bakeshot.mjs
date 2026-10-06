@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = process.argv[2] ?? '.';
+const OUT = (process.argv[2] && !process.argv[2].startsWith('--')) ? process.argv[2] : '.';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript' };
 const server = http.createServer((req, res) => {
   const f = path.join(ROOT, decodeURI(req.url.split('?')[0]));
@@ -17,7 +17,7 @@ const server = http.createServer((req, res) => {
     res.end(b);
   });
 }).listen(8202);
-// 渲染后端见 tools/chrome-args.mjs：默认 SwiftShader，CHROME_GPU=1 走本机显卡。
+// 渲染后端见 tools/chrome-args.mjs：默认本机 MX230，--swiftshader 退回软渲染。
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, protocolTimeout: 1200000,
   args: chromeArgs() });
 const CAMS = [
