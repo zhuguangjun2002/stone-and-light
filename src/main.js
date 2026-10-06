@@ -756,6 +756,21 @@ const person = (() => {
                    [0.185, 1.18], [0.12, 1.30], [0.085, 1.36]]
     .map(([r, y]) => new THREE.Vector2(r, y));
   const robe = new THREE.Mesh(new THREE.LatheGeometry(robePts, 18), M(robeCol));
+  // 垂直衣褶：径向按 cos(6θ) 轻微扰动，越往肩上扰动越小（与 figure.js 石像同一招）
+  {
+    const attr = robe.geometry.attributes.position;
+    for (let i = 0; i < attr.count; i++) {
+      const x = attr.getX(i), y = attr.getY(i), z = attr.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 1e-4) continue;
+      const wobble = Math.cos(Math.atan2(z, x) * 6) * 0.016 * Math.max(0, 1 - y / 1.2);
+      const s = (r + wobble) / r;
+      attr.setX(i, x * s);
+      attr.setZ(i, z * s);
+    }
+    attr.needsUpdate = true;
+    robe.geometry.computeVertexNormals();
+  }
   robe.position.y = 0;
   g.add(robe);
 
