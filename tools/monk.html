@@ -12,7 +12,7 @@
 // 第三人称替身的检验页：一位 ~1.7 m 的修士站在铺石板上，正侧后多个机位，
 // 可切换到 Blender 生成的 monk.glb（程序化版与 Blender 版并存对比）。
 import * as THREE from '../lib/three.module.js';
-import { buildPerson } from '../src/person.js';
+import { buildPerson, poseWalk } from '../src/person.js';
 import { pavingTexture } from '../src/materials.js';
 
 const r = new THREE.WebGLRenderer({ antialias: true });
@@ -110,17 +110,10 @@ function tick(t) {
   if (walking) {
     const dt = lastTickT ? Math.min(0.06, (t - lastTickT) / 1000) : 0;
     lastTickT = t;
-    // 程序化版：正弦驱动，周期约 1.2s，与 Blender 版语速一致
+    // 程序化版：正弦驱动（与 src/main.js / src/walkers.js 共用 poseWalk，周期约 1.2 s）
     if (person && person.visible) {
-      const L = findLimbs(person);
       const phase = t * 0.001 * (2 * Math.PI / 1.2);
-      const amp = 0.55;
-      const ph0 = Math.sin(phase) * amp;
-      const ph1 = Math.sin(phase + Math.PI) * amp;
-      if (L.ArmL) L.ArmL.rotation.x = ph0;
-      if (L.LegR) L.LegR.rotation.x = ph0;
-      if (L.ArmR) L.ArmR.rotation.x = ph1;
-      if (L.LegL) L.LegL.rotation.x = ph1;
+      poseWalk(person, phase, 0.55, true);
     }
     // Blender 版：AnimationMixer 驱动（GLB 自带 walk clips）
     if (blenderVer && blenderVer.visible && blenderMixer) blenderMixer.update(dt);

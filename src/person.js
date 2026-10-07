@@ -1,9 +1,12 @@
 import * as THREE from '../lib/three.module.js';
 
-// 第三人称替身构造器（从 src/main.js 抽出来，供 src/main.js 与 tools/monk.html 共用）。
-export function buildPerson() {
-  const robeCol = 0x6f5b45, robeDark = 0x5d4c39, beltCol = 0xc9b294,
-        skin = 0xc8957a, beardCol = 0x54453a, hairCol = 0x5e4a38, pouchCol = 0x8a653f;
+// 第三人称替身构造器（从 src/main.js 抽出来，供 src/main.js、src/walkers.js 与
+// tools/monk.html 共用）。opt 可换调色板，用来让领地里的几位修士各有各的会衣颜色。
+export function buildPerson(opt = {}) {
+  const robeCol = opt.robe ?? 0x6f5b45, robeDark = opt.robeDark ?? 0x5d4c39,
+        beltCol = opt.belt ?? 0xc9b294, skin = opt.skin ?? 0xc8957a,
+        beardCol = opt.beard ?? 0x54453a, hairCol = opt.hair ?? 0x5e4a38,
+        pouchCol = opt.pouch ?? 0x8a653f;
   const M = (c, rough = 0.9) =>
     new THREE.MeshStandardMaterial({ color: c, roughness: rough });
 
@@ -157,4 +160,24 @@ export function buildPerson() {
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   g.visible = false;
   return g;
+}
+
+// 走路摆臂：对臂/腿枢轴按相位驱动 rotation.x。ArmL+LegR 同相、ArmR+LegL 反相——
+// 与 tools/monk.html 里检验过的那套一致（周期约 1.2 s、振幅约 0.55）。
+// walking=false 时把四个枢轴归零（站定）。
+// 领地里的修士 NPC（src/walkers.js）与第三人称替身共用这一函数，免得漂。
+export function poseWalk(root, phase, amp = 0.55, walking = true) {
+  const L = {};
+  root.traverse((o) => {
+    if (o.name === 'ArmL' || o.name === 'ArmR' || o.name === 'LegL' || o.name === 'LegR') L[o.name] = o;
+  });
+  if (!walking) {
+    for (const k in L) L[k].rotation.x = 0;
+    return;
+  }
+  const s0 = Math.sin(phase) * amp, s1 = Math.sin(phase + Math.PI) * amp;
+  if (L.ArmL) L.ArmL.rotation.x = s0;
+  if (L.LegR) L.LegR.rotation.x = s0;
+  if (L.ArmR) L.ArmR.rotation.x = s1;
+  if (L.LegL) L.LegL.rotation.x = s1;
 }

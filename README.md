@@ -7,7 +7,8 @@
 结构逻辑用代码砌出来的。彩窗有两套镶玻方案；室内的间接光在加载时用 Worker 现烘成
 顶点色；五座门能开能关（关 / 便门 / 全开），雨雪天会自己关上；第一人称走路会被墙、
 柱、长椅和关着的门挡住。教堂不是孤零零的一座房子：它嵌在一片**领地**里——
-南侧回廊、四周的教士住宅、北侧墓地和西端集市，同样全部由代码砌成。
+南侧回廊、四周的教士住宅、北侧墓地和西端集市，同样全部由代码砌成——
+回廊里、服务巷上、集市与墓地里还有几位修士在各自走动。
 
 > **EN** — *Stone & Light* is a fully procedural High Gothic cathedral in vanilla Three.js:
 > pointed arches, quadripartite rib vaults, flying buttresses, procedural stained glass,
@@ -46,16 +47,35 @@ python3 -m http.server 8123
 生成的同一款修士），两个版本都暴露出 `ArmL/ArmR/LegL/LegR` 枢轴节点——
 页面按钮「播放走路动画」时：
 
-- 程序化版 `src/person.js`：在 `requestAnimationFrame` 里用正弦驱动
+- 程序化版 `src/person.js`：在 `requestAnimationFrame` 里用 `poseWalk()` 正弦驱动
   `rotation.x = sin(phase)·0.55`, ArmL+LegR 同相位、ArmR+LegL 相位差 π；
 - Blender 版 `assets/monk.glb`：直接播它在 GLB 里保存的 4 条 walk clips
   （命名 `walk_ArmL/ArmR/LegL/LegR`），由 `THREE.AnimationMixer.update(dt)` 推进。
+
+`poseWalk()` 现在由 `src/person.js` 导出，第三人称替身、领地里的修士 NPC
+（`src/walkers.js`）与这个自检页共用同一份，走路幅度不会各走各的。
 
 生成/导入命令：
 
     blender --background --python tools/generate_monk.py -- assets/monk.glb
 
 `assets/monk.glb` 现在含 4 条动画片段 + pivot 几何；第一键把按钮切换成"暂停走路动画"。
+
+## 领地里的修士 NPC
+
+领地不是布景，有修士在过日子。`src/walkers.js` 放了 **7 位修士**沿各自的动线行走：
+回廊南北两条走廊各一位来回踱步、一位绕内院水井转经；服务巷两位沿酒坊来回巡查；
+西前庭集市一位在摊棚外转；北侧墓地一位沿碑林内缘慢走。速度 0.75–1.2 m/s
+（墓园最慢像在默想），会衣颜色各不相同。
+
+- 他们**挂在 `scene` 不挂 `root`**：这样不进第一人称碰撞网格、不进室内烘焙、也不被
+  七个检查器扫描。NPC 是动的东西，丢进只为静态几何建的射线加速网格里会留下残影。
+- 代价是围墙拆除后领地很开敞，于是靠**路径本身贴着过道走**来保证不穿墙——
+  `tools/check-npc.mjs` 用与场景同一份路由（`buildRoute`/`pointAt`）加同一张碰撞网格，
+  沿每条路线走一圈逐点平射，验证身体圆柱不蹭任何构件、脚底正好落在地坪上。
+  改了 `walkers.js` 的路由或 `town.js` 的布局都要重跑它。
+- 第三人称行走（`V`）时替身现在也**摆臂走路**，用的是同一个 `poseWalk()`。
+- 无头截图：`node tools/shoot-main.mjs --at=px,py,pz,tx,ty,tz` 直接拍主站（含 NPC）。
 
 ## 操作
 
@@ -100,6 +120,7 @@ URL 参数：`?view=3&section=1&labels=1&build=0.42&time=0.95&panel=1&tour=1&pre
 | `src/audio.js` | 声音 | 钟声按真实钟的非谐泛音列（hum/prime/tierce…）合成；风、鸟、入堂圣咏垫，全部 Web Audio 无音频文件 |
 | `src/main.js` | 光照日夜、漫游 / 行走、剖面、标注、建造动画、设计面板 | 建造次序 = 区域（歌坛→耳堂→中厅逐开间→西立面→尖塔）+ 区域内自下而上；剖面用材质级裁剪；标注按室内 / 外分组并做屏幕空间去重 |
 | `src/person.js` | 第三人称替身 `buildPerson()`：长袍 / 披肩 / 兜帽 / 袖与里料 / 手腿 / 鞋 / 眼鼻须；四个枢轴组（ArmL/ArmR/LegL/LegR）存 `g.userData`，三.js/Blender两格中同名。 |
+| `src/walkers.js` | 领地里的修士 NPC：7 位沿回廊 / 服务巷 / 集市 / 墓地的动线行走，用 `buildPerson` 的替身 + 同一套 `poseWalk` 摆臂。挂在 `scene` 只做视觉（不进碰撞/烘焙/检查器）；路径走线由 `tools/check-npc.mjs` 静态守住。 |
 
 ## 导览影片
 
@@ -124,7 +145,7 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 24 t
 
 ## 测试与检查
 
-六个检查器各查一类问题，当前基线（每次改几何都该重跑一遍）：
+七个检查器各查一类问题，当前基线（每次改几何都该重跑一遍）：
 
 | 查什么 | 工具 | 当前 |
 |---|---|---|
@@ -134,6 +155,7 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 24 t
 | 构件穿出外皮 | `check-poke.mjs` | 49 个机位 **0 处** |
 | 酿酒坊水路通不通 | `check-brew.mjs` | **7/7**（屋面雨可被收集并送走） |
 | 阴影视锥罩得住吗 | `check-shadow.mjs` | 太阳走一天 **0 处**越界（7.3 cm/px） |
+| 修士 NPC 走线通不通 | `check-npc.mjs` | 7 位修士走一圈，**0 处**蹭墙 / 脚不沾地 |
 
 ```bash
 node test/smoke.mjs          # 无浏览器构建整个场景图，校验网格数与总高
@@ -143,6 +165,7 @@ node tools/check-rain.mjs    # 下雨天哪里漏：撒一场雨，找出雨能�
 node tools/check-poke.mjs    # 查"露出来的部分"：构件的一角戳穿了屋面/墙面（见下）
 node tools/check-brew.mjs    # 酿酒坊大院的水路连通：檐沟/落水管/明沟/暗管/渗井（见下）
 node tools/check-shadow.mjs  # 阴影正交相机的视锥够不够罩住整片领地（见下）
+node tools/check-npc.mjs     # 修士 NPC 走线：沿路由走一圈，别蹭墙、脚别悬空（见下）
 node tools/check-flicker.mjs --swiftshader   # 退回软渲染，复现跨机器基线 3481 px（见下）
 # test/audio-render.html     # 浏览器打开：离线渲染音频，测量钟声/管风琴的峰值与 RMS
 ```
@@ -313,6 +336,29 @@ node tools/check-poke.mjs --r=70 --size=1200x840 --gap=0.06
 
 当前基线：**49 个机位扫下来，0 处穿刺。**（领地是独立个体，墓碑、窗这类"站在面上"的构件会被判成外皮孤岛，所以穿刺检查器按 `userData.town` 跳过领地，只查教堂外壳。）
 
+### 修士 NPC 走线检查器（"人别插进墙里"）
+
+`tools/check-npc.mjs`：领地里的修士 NPC 是纯视觉（挂 `scene`，不进碰撞网格），
+所以运行时"穿不穿墙"没人管——这个静态检查器补上。它用**与场景同一份**东西：
+路由来自 `src/walkers.js` 的 `buildRoute()` / `pointAt()`，碰撞网格就是 `main.js`
+里那份 `buildGrid(root, {cell:1.4})`（关着的门扇先藏起来）。沿每位修士的路线走一整圈
+（开放路走个来回），每个采样点做两件事：
+
+- **身体圆柱**：朝 10 个方位平射身体半径 + 0.10 m，最近的障碍不能比这更近；
+- **脚底**：从脚上方 2.5 m 竖直往下打，必须打到地坪，且地面高度贴着该条路由的 `y`。
+
+任一不满足就报出坐标、方位与距离并 `exit 1`。
+
+```bash
+node tools/check-npc.mjs
+STEP=0.25 node tools/check-npc.mjs    # 采密一点（默认 0.3 m 一点）
+```
+
+当前基线：**7 位修士、约 2600 个采样点、0 处蹭墙 / 0 处脚不沾地。**
+（跑这个检查器时顺手排掉了三处问题：回廊走道在**四角并不贯通**——角上的敞廊拱墙
+会横到走道里，南北两条走廊得走成开放路而非绕整圈；集市原定的内圈撞到摊棚木柱；
+集市十字的高台其实有 7 m 多高，脚下会悬空。改了 `walkers.js` 或 `town.js` 都要重跑。）
+
 ### 门
 
 五座门（西立面三座 + 南北耳堂各一座）都是**真的门**，不是贴在洞口上的一块板：
@@ -472,7 +518,7 @@ iOS 的 Safari 根本不支持它，取不到值时不能当成大内存机器�
   （双面的话背面无光，从地下看是一整片黑幕）。泥土用 `MeshBasicMaterial`（不受光照、
   恒亮）配一张程序化土壤纹理：噪声 + 岩层，避免一眼看成纯色。着地的墙/柱再往下延
   一段地基（`main.js` 的 `addFoundations`，挂在 scene 不挂 root，因此不进碰撞/烘焙/
-  建造动画，也不被六个检查器看见），土面定在 -2.5、地基从 -0.02 埋到 -3.0——从地下
+  建造动画，也不被七个检查器看见），土面定在 -2.5、地基从 -0.02 埋到 -3.0——从地下
   看墙脚是真的戳进土里，而不是悬空。
 - **墙体洞口底边会生成一片 y=0 的水平面。** 层叠的几道墙各生成一片、彼此共面，
   所以门口要用一块实心门槛把它们压在下面。
@@ -504,6 +550,16 @@ iOS 的 Safari 根本不支持它，取不到值时不能当成大内存机器�
 用 puppeteer 调 `window.__shot(px,py,pz, tx,ty,tz)` 与 `window.__sunAt(t)` 出图，
 适合定点比对某处改动。`docs/` 里的截图直接用 URL 参数拍主站（`?view=1`…`?view=6`），
 **等烘焙跑完再拍**——第一张付一次烘焙的钱，后面几张走 IndexedDB 缓存。
+
+要拍到**领地里的修士 NPC**（取景页没有 NPC），用 `tools/shoot-main.mjs` 拍主站本身：
+
+```bash
+node tools/shoot-main.mjs --at=px,py,pz,tx,ty,tz [--at=...]   # 出图到 /tmp/church-main/
+```
+
+它以 `?bake=0` 打开 `index.html`（跳过室内烘焙、秒开），等场景与 NPC 就绪后推进
+一小段时间让修士站到路上，再调 `window.__lookAt(...)`（`main.js` 里的无头测试钩子）
+定点出图。
 
 ## 部署
 

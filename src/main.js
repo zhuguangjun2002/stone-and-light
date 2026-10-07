@@ -14,7 +14,8 @@ import { TOUR } from './tour.js';
 import { createWorksite } from './worksite.js';
 import { createAudio } from './audio.js';
 import { PRESETS, applyPreset } from './presets.js';
-import { buildPerson } from './person.js';
+import { buildPerson, poseWalk } from './person.js';
+import { createWalkers } from './walkers.js';
 
 // ---------- 渲染器与场景 ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -737,12 +738,16 @@ function setBuildActive(on) {
 }
 
 // ---------- 第一人称/第三人称行走 ----------
-const walk = { active: false, tp: false, yaw: 0, pitch: 0, keys: new Set() };
+const walk = { active: false, tp: false, yaw: 0, pitch: 0, keys: new Set(), animPhase: 0 };
 const walkPos = { x: 0, z: 0 };
 const _fwd = new THREE.Vector3();
 
 const person = buildPerson();
 scene.add(person);
+
+// 领地里的修士 NPC：挂在 scene（不进碰撞/烘焙/检查器，见 src/walkers.js 开头）。
+const walkers = createWalkers();
+scene.add(walkers.group);
 
 function setWalk(on) {
   walk.active = on;
@@ -750,6 +755,8 @@ function setWalk(on) {
   walkPos.x = camera.position.x; walkPos.z = camera.position.z;
   controls.enabled = !on;
   person.visible = false;
+  poseWalk(person, 0, 0.55, false);
+  walk.animPhase = 0;
   if (on) {
     camera.getWorldDirection(_fwd);
     walk.yaw = Math.atan2(-_fwd.x, -_fwd.z);
@@ -787,6 +794,9 @@ function updateWalk(dt) {
       if (canStep(walkPos.x, z, 0, sz)) walkPos.z += sz;
     }
   }
+  // 摆臂：第三人称替身跟着走，步频跟速度挂（快走摆得急），站定时归零。
+  if (len > 0) walk.animPhase += dt * (speed / 1.5) * (2 * Math.PI / 1.2);
+  poseWalk(person, walk.animPhase, 0.55, len > 0);
   person.position.set(walkPos.x, 0, walkPos.z);
   person.rotation.y = walk.yaw;
   if (walk.tp) {                                  // 第三人称：相机在替身后上方，按 pitch 微调高度
@@ -815,6 +825,14 @@ window.__setWalk = setWalk;
 window.__setWalkTP = setWalkTP;
 window.__walk = walk;
 window.__walkPos = walkPos;
+window.__walkers = walkers;
+// 无头截图用：直接把相机放到某处（绕过 OrbitControls 的阻尼），看某段院落
+window.__lookAt = (px, py, pz, tx, ty, tz) => {
+  fly = null;
+  camera.position.set(px, py, pz);
+  controls.target.set(tx, ty, tz);
+  controls.update();
+};
 
 // ---------- 电影导览 ----------
 let RECORD = false;   // ?record=1：确定性逐帧步进，供无头浏览器抓帧成片
@@ -1192,6 +1210,7 @@ function animate() {
   else controls.update();
   updateDoors(doors, dt);
   updateNearDoor();
+  walkers.update(dt);
   updatePrecip(dt);
   audio.setInside(insideCathedral(camera.position));
   updateLabels();
@@ -1239,6 +1258,7 @@ if (q.get('record')) {
   setTour(true);
   window.__tourStep = (dt) => {
     if (tour.active) updateTour(dt);
+    walkers.update(dt);
     renderer.render(scene, camera);
     return !tour.active;
   };

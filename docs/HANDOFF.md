@@ -26,11 +26,12 @@
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
 | `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 六建筑 + 服务巷 + 院子排水 `buildBreweryDrain`）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
 | `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
-| `src/person.js` | 第三人称替身构造 `buildPerson()`（从 `main.js` 抽出）：长袍/斗篷/兜帽/里料袖、ArmL/ArmR/LegL/LegR 枢轴组、`userData` 存枢轴引用 |
+| `src/person.js` | 第三人称替身构造 `buildPerson()`（从 `main.js` 抽出）：长袍/斗篷/兜帽/里料袖、ArmL/ArmR/LegL/LegR 枢轴组、`userData` 存枢轴引用；导出 `poseWalk()` 摆臂（替身/NPC/monk.html 共用） |
+| `src/walkers.js` | 领地里的修士 NPC（`createWalkers()`）：7 位沿回廊/服务巷/集市/墓地动线行走；挂在 `scene` 只做视觉；导出 `WALKERS`/`buildRoute`/`pointAt` 供 `tools/check-npc.mjs` 校验 |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 六个检查器（含 `check-brew.mjs` / `check-shadow.mjs`）+ 取景页（shot.html / shoot.mjs）+ 两个水路演示（drainage.html / **brewery.html**）+ **人物自检（monk.html）** + 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）+ Blender 生成脚本（generate_monk.py → assets/monk.glb）|
+| `tools/` | 七个检查器（含 `check-brew.mjs` / `check-shadow.mjs` / `check-npc.mjs`）+ 取景页（shot.html / shoot.mjs）+ **主站取景 shoot-main.mjs**（含 NPC）+ 两个水路演示（drainage.html / **brewery.html**）+ **人物自检（monk.html）** + 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）+ Blender 生成脚本（generate_monk.py → assets/monk.glb）|
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
@@ -53,11 +54,30 @@ node tools/check-poke.mjs           # 49 机位 0 处穿刺（按 userData.town 
 node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（合计 3507 px），exit 0
                                     # 后端自报一行；--swiftshader → 3481 px 可移植基线
 node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太阳走一天 48 档）
+node tools/check-npc.mjs            # 修士 NPC 走线 0 处蹭墙 / 0 处脚不沾地（约 2600 采样点）
 ```
 
 ## 状态：已收尾（截至 2026-10-07）
 
-### 本轮：修士模型 + 走路动画 v3
+### 本轮：领地修士 NPC（walkers）
+
+- **`src/walkers.js`**：7 位修士 NPC 沿各自动线行走——回廊南北走廊各一位来回踱步、
+  一位绕内院水井转经；服务巷两位沿酒坊巡查（开放路来回）；西前庭集市一位；北侧墓地一位。
+  速度 0.75–1.2 m/s、会衣配色各异。每位就是一份 `buildPerson(pal)` 的替身。
+- **挂 `scene` 不挂 `root`**（与第三人称替身一致）：不进碰撞网格、不进烘焙、七个检查器
+  都看不见。NPC 是动的，丢进静态射线加速网格会留残影。
+- **`poseWalk()`** 从 `monk.html` 提进 `src/person.js` 导出，替身 / NPC / 自检页共用；
+  第三人称行走（V）时替身现在也摆臂。
+- **`tools/check-npc.mjs`（新）**：同一份路由 + 同一张碰撞网格，沿每条路线走一圈，
+  逐点查身体圆柱（10 方位）不蹭构件、脚底正好落地坪。基线 **7 位 / 约 2600 点 / 0 处**。
+  排查中修掉三处：回廊走道**四角不贯通**（角上拱墙横到走道里）→ 走廊改开放路；
+  集市原内圈撞摊棚柱、市场十字高台 7 m 会悬空 → 移到前庭西侧空场。
+- **`tools/shoot-main.mjs`（新）**：拍主站本身（`?bake=0` 秒开），拍得到取景页没有的 NPC；
+  用新的 `window.__lookAt` 钩子定点。
+- 导览录制（`record-tour.mjs` → `__tourStep`）里也调 `walkers.update(dt)`：片子里 NPC 会走。
+- 七个检查器基线全绿、冒烟仍 2437 网格、`docs/tour.mp4` 未动（仍 23 MB）。
+
+### 上一轮：修士模型 + 走路动画 v3
 
 - **第三人称 walk 模式**：`src/main.js` 按 F 进入第一人称后再按 **V** 切换第三人称，
   相机挂在 ≈1.7 m 替身后面跟随移动。替身由 `src/person.js` 的 `buildPerson()` 构建，
