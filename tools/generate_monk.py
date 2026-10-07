@@ -214,6 +214,26 @@ for sx in [-1, 1]:
     parent(po, Pivl)
     parent(sk, Pivl)
 
+# ---------- 走路循环 ----------
+bpy.context.scene.render.fps = 20
+bpy.context.scene.frame_start = 1
+bpy.context.scene.frame_end = 25
+amp_v = 0.55
+markers = [1, 7, 13, 19, 25]
+walk_v0 = [0.0, amp_v, 0.0, -amp_v, 0.0]
+walk_v1 = [0.0, -amp_v, 0.0, amp_v, 0.0]
+def bake_steps(obj, values):
+    obj.animation_data_create()
+    for f, v in zip(markers, values):
+        obj.rotation_euler.x = v
+        obj.keyframe_insert(data_path='rotation_euler', index=0, frame=f)
+    obj.rotation_euler.x = 0.0
+    if obj.animation_data.action:
+        obj.animation_data.action.name = 'walk_' + obj.name
+
+for tgt, values in ((armL, walk_v0), (legR, walk_v0), (armR, walk_v1), (legL, walk_v1)):
+    bake_steps(tgt, values)
+
 os.makedirs(os.path.dirname(os.path.abspath(OUT)) or '.', exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format='GLB')
 print('exported', OUT)

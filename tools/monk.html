@@ -52,16 +52,26 @@ person.visible = true;
 scene.add(person);
 window.__person = person;
 
-let blenderVer = null;
+let blenderVer = null, blenderMixer = null, blenderClips = [];
 async function ensureBlender() {
   if (blenderVer) return blenderVer;
   const { GLTFLoader } = await import('../lib/GLTFLoader.js');
   const loader = new GLTFLoader();
-  blenderVer = await new Promise((resolve, reject) =>
-    loader.load('/assets/monk.glb', g => resolve(g.scene), undefined, reject));
+  const gltf = await new Promise((resolve, reject) =>
+    loader.load('/assets/monk.glb', (g) => resolve(g), undefined, reject));
+  blenderVer = gltf.scene;
   blenderVer.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   blenderVer.visible = false;
   scene.add(blenderVer);
+  blenderClips = gltf.animations || [];
+  if (blenderClips.length) {
+    blenderMixer = new THREE.AnimationMixer(blenderVer);
+    for (const clip of blenderClips) {
+      const ac = blenderMixer.clipAction(clip);
+      ac.setLoop(THREE.LoopRepeat, Infinity);
+      ac.play();
+    }
+  }
   window.__blenderVer = blenderVer;
   return blenderVer;
 }
@@ -95,27 +105,35 @@ function findLimbs(group) {
   return L;
 }
 let walking = false;
+let lastTickT = 0;
 function tick(t) {
   if (walking) {
-    const phase = t * 0.001 * 3.0;
-    const amp = 0.55;
-    const ph0 = Math.sin(phase) * amp;
-    const ph1 = Math.sin(phase + Math.PI) * amp;
-    for (const g of [person, blenderVer]) {
-      if (!g) continue;
-      const L = findLimbs(g);
+    const dt = lastTickT ? Math.min(0.06, (t - lastTickT) / 1000) : 0;
+    lastTickT = t;
+    // 程序化版：正弦驱动，周期约 1.2s，与 Blender 版语速一致
+    if (person && person.visible) {
+      const L = findLimbs(person);
+      const phase = t * 0.001 * (2 * Math.PI / 1.2);
+      const amp = 0.55;
+      const ph0 = Math.sin(phase) * amp;
+      const ph1 = Math.sin(phase + Math.PI) * amp;
       if (L.ArmL) L.ArmL.rotation.x = ph0;
       if (L.LegR) L.LegR.rotation.x = ph0;
       if (L.ArmR) L.ArmR.rotation.x = ph1;
       if (L.LegL) L.LegL.rotation.x = ph1;
     }
+    // Blender 版：AnimationMixer 驱动（GLB 自带 walk clips）
+    if (blenderVer && blenderVer.visible && blenderMixer) blenderMixer.update(dt);
     render();
+  } else {
+    lastTickT = 0;
   }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 window.__setWalkAnim = (on) => {
   walking = on;
+  lastTickT = 0;
   const btn = document.getElementById('anim');
   if (btn) btn.textContent = on ? '暂停走路动画' : '播放走路动画';
   if (!on) {
@@ -124,7 +142,16 @@ window.__setWalkAnim = (on) => {
       const L = findLimbs(g);
       for (const k of Object.keys(L)) L[k].rotation.x = 0;
     }
+    if (blenderMixer) blenderMixer.stopAllAction();
     render();
+  } else if (blenderMixer && blenderClips) {
+    blenderMixer.setTime(0);
+    for (const clip of blenderClips) {
+      const ac = blenderMixer.clipAction(clip);
+      ac.reset();
+      ac.setLoop(THREE.LoopRepeat, Infinity);
+      ac.play();
+    }
   }
 };
 
