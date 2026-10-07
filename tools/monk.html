@@ -6,7 +6,7 @@
 <div id="bar">
   <u data-v="front">正面</u><u data-v="side">侧面</u><u data-v="back">背面</u>
   <u data-v="full">全身</u><u data-v="pose34">四分之三</u>
-  <u id="spin">环绕</u><u id="swap">换成 Blender 版</u>
+  <u id="spin">环绕</u><u id="anim">播放走路动画</u><u id="swap">换成 Blender 版</u>
 </div>
 <script type="module">
 // 第三人称替身的检验页：一位 ~1.7 m 的修士站在铺石板上，正侧后多个机位，
@@ -50,6 +50,7 @@ scene.add(pole);
 const person = buildPerson();
 person.visible = true;
 scene.add(person);
+window.__person = person;
 
 let blenderVer = null;
 async function ensureBlender() {
@@ -61,6 +62,7 @@ async function ensureBlender() {
   blenderVer.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   blenderVer.visible = false;
   scene.add(blenderVer);
+  window.__blenderVer = blenderVer;
   return blenderVer;
 }
 
@@ -83,6 +85,48 @@ window.__loadBlender = (on) => ensureBlender().then(() => {
   render();
 });
 window.__ready = true;
+
+// ---------- 走路动画 ----------
+function findLimbs(group) {
+  const L = {};
+  group.traverse((o) => {
+    if (o.name === 'ArmL' || o.name === 'ArmR' || o.name === 'LegL' || o.name === 'LegR') L[o.name] = o;
+  });
+  return L;
+}
+let walking = false;
+function tick(t) {
+  if (walking) {
+    const phase = t * 0.001 * 3.0;
+    const amp = 0.55;
+    const ph0 = Math.sin(phase) * amp;
+    const ph1 = Math.sin(phase + Math.PI) * amp;
+    for (const g of [person, blenderVer]) {
+      if (!g) continue;
+      const L = findLimbs(g);
+      if (L.ArmL) L.ArmL.rotation.x = ph0;
+      if (L.LegR) L.LegR.rotation.x = ph0;
+      if (L.ArmR) L.ArmR.rotation.x = ph1;
+      if (L.LegL) L.LegL.rotation.x = ph1;
+    }
+    render();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+window.__setWalkAnim = (on) => {
+  walking = on;
+  const btn = document.getElementById('anim');
+  if (btn) btn.textContent = on ? '暂停走路动画' : '播放走路动画';
+  if (!on) {
+    for (const g of [person, blenderVer]) {
+      if (!g) continue;
+      const L = findLimbs(g);
+      for (const k of Object.keys(L)) L[k].rotation.x = 0;
+    }
+    render();
+  }
+};
 
 let spinTimer = 0;
 window.__setSpin = (on) => {
@@ -112,6 +156,7 @@ document.getElementById('spin').onclick = (e) => {
   window.__setSpin(on);
   e.target.textContent = on ? '停止环绕' : '环绕';
 };
+document.getElementById('anim').onclick = () => window.__setWalkAnim(!walking);
 
 window.__view('front');
 </script>

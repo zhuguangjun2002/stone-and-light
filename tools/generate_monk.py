@@ -73,8 +73,8 @@ hair_mat = make_mat('Beard', '#54453a', 0.95)
 pouch_mat = make_mat('Leather', '#8a653f', 0.85)
 
 # 1) 长袍（含衣褶扰动）
-robe_key_y = [(0.001, 0.0), (0.30, 0.0), (0.285, 0.06), (0.26, 0.18),
-              (0.21, 0.55), (0.175, 0.78), (0.20, 1.02),
+robe_key_y = [(0.001, 0.22), (0.265, 0.22), (0.262, 0.26), (0.245, 0.30),
+              (0.225, 0.42), (0.21, 0.55), (0.175, 0.78), (0.20, 1.02),
               (0.185, 1.18), (0.12, 1.30), (0.085, 1.36)]
 robe = lathe('Robe', robe_key_y, 20, mat=robe_mat)
 for v in robe.data.vertices:
@@ -155,9 +155,9 @@ eyes_mat = make_mat('Eyes', '#241f1a', 0.45)
 liner_mat = make_mat('Lining', '#d8c79e', 0.85)
 sm('EyeL', -0.042, 0.118, 1.512, 0.011, 1, 0.7, 1, eyes_mat)
 sm('EyeR', 0.042, 0.118, 1.512, 0.011, 1, 0.7, 1, eyes_mat)
-hem = lathe('LiningBand', [(0.303, 0.012), (0.297, 0.07)], 20, mat=liner_mat)
+hem = lathe('LiningBand', [(0.272, 0.215), (0.268, 0.27)], 20, mat=liner_mat)
 
-# 10) 袖子 + 袖口内衬 + 双手
+# 10) 袖子 + 袖口内衬 + 双手（ArmL/ArmR 枢轴组）
 def bone(name, a, b, r_a, r_b, mat):
     va, vb = Vector(a), Vector(b)
     v = vb - va
@@ -172,20 +172,47 @@ def bone(name, a, b, r_a, r_b, mat):
     for p in o.data.polygons:
         p.use_smooth = True
     return o
+def pivot(name, x, y, z):
+    e = bpy.data.objects.new(name, None)
+    e.location = (x, y, z)
+    bpy.context.collection.objects.link(e)
+    bpy.context.view_layer.update()
+    return e
+def parent(child, p):
+    child.parent = p
+    child.matrix_parent_inverse = p.matrix_world.inverted()
+
+armL = pivot('ArmL', -0.155, 0.0, 1.19)
+armR = pivot('ArmR', 0.155, 0.0, 1.19)
 for sx in [-1, 1]:
+    Piv = armL if sx < 0 else armR
     A = (sx * 0.155, 0.0, 1.19)
     B = (sx * 0.125, 0.14, 0.79)
     v = Vector(B) - Vector(A)
     clen = 0.14
-    bone('Sleeve_%d' % sx, A, B, 0.052, 0.062, cape_mat)
-    bone('Cuff_%d' % sx, Vector(B) - v.normalized() * clen, B, 0.062, 0.078, liner_mat)
-    sm('Hand_%d' % sx, sx * 0.125, 0.16, 0.76, 0.04, 1, 1, 1, skin_mat)
+    sl = bone('Sleeve_%d' % sx, A, B, 0.052, 0.062, cape_mat)
+    cu = bone('Cuff_%d' % sx, Vector(B) - v.normalized() * clen, B, 0.062, 0.078, liner_mat)
+    ha = sm('Hand_%d' % sx, sx * 0.125, 0.16, 0.76, 0.04, 1, 1, 1, skin_mat)
+    for c in (sl, cu, ha):
+        parent(c, Piv)
 
-# 11) 脚
-sm('FootL', -0.09, 0.04, 0.05, 0.05, 0.8, 1.6, 0.4, make_mat('Foot', '#3a332a', 0.95))
-sm('FootR', 0.09, 0.04, 0.05, 0.05, 0.8, 1.6, 0.4, make_mat('Foot', '#3a332a', 0.95))
-
-# materials
+# 11) 双腿 & 鞋子（LegL/LegR 枢轴组）
+pants_mat = make_mat('Pants', '#d9c9a8', 0.9)
+legL = pivot('LegL', -0.10, 0.0, 0.55)
+legR = pivot('LegR', 0.10, 0.0, 0.55)
+for sx in [-1, 1]:
+    Pivl = legL if sx < 0 else legR
+    bpy.ops.mesh.primitive_cone_add(vertices=10, radius1=0.05, radius2=0.055, depth=0.5)
+    po = bpy.context.active_object
+    po.name = 'Pants_%d' % sx; po.data.name = po.name
+    po.location = (sx * 0.10, 0.0, 0.30)
+    po.data.materials.append(pants_mat)
+    for p in po.data.polygons:
+        p.use_smooth = True
+    sk = sm('Shoe_%d' % sx, sx * 0.10, 0.04, 0.05, 0.05, 0.8, 1.6, 0.4,
+            make_mat('Foot', '#3a332a', 0.95))
+    parent(po, Pivl)
+    parent(sk, Pivl)
 
 os.makedirs(os.path.dirname(os.path.abspath(OUT)) or '.', exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format='GLB')

@@ -10,10 +10,10 @@ export function buildPerson() {
   const g = new THREE.Group();
 
   // 1) 长袍：圆柱旋转放样，衣摆略外张，腰收窄、胸口微张，收到颈部
-  const robePts = [[0.001, 0], [0.30, 0], [0.285, 0.06], [0.26, 0.18],
-                   [0.21, 0.55], [0.175, 0.78], [0.20, 1.02],
-                   [0.185, 1.18], [0.12, 1.30], [0.085, 1.36]]
-    .map(([r, y]) => new THREE.Vector2(r, y));
+  const ROBE_P = [[0.001, 0.22], [0.265, 0.22], [0.262, 0.26], [0.245, 0.30],
+                  [0.225, 0.42], [0.21, 0.55], [0.175, 0.78], [0.20, 1.02],
+                  [0.185, 1.18], [0.12, 1.30], [0.085, 1.36]];
+  const robePts = ROBE_P.map(([r, y]) => new THREE.Vector2(r, y));
   const robe = new THREE.Mesh(new THREE.LatheGeometry(robePts, 18), M(robeCol));
   // 垂直衣褶：径向按 cos(6θ) 轻微扰动，越往肩上扰动越小（与 figure.js 石像同一招）
   {
@@ -49,7 +49,7 @@ export function buildPerson() {
     strip.rotation.x = 0.1064;
     g.add(strip);
   }
-  const pts = [[0.001,0],[0.30,0],[0.285,0.06],[0.26,0.18],[0.21,0.55],[0.175,0.78],[0.20,1.02],[0.185,1.18],[0.12,1.30],[0.085,1.36]];
+  const pts = ROBE_P;
   const robeR = (y) => {
     for (let i = 1; i < pts.length; i++) if (y <= pts[i][1]) {
       const [r0, y0] = pts[i - 1], [r1, y1] = pts[i];
@@ -101,41 +101,57 @@ export function buildPerson() {
     g.add(eye);
   }
   // 里料下摆 band（绕长袍最底部一小圈浅色内衬）
-  const hemPts = [new THREE.Vector2(0.303, 0.012), new THREE.Vector2(0.297, 0.07)];
+  const hemPts = [new THREE.Vector2(0.272, 0.215), new THREE.Vector2(0.268, 0.27)];
   const hem = new THREE.Mesh(new THREE.LatheGeometry(hemPts, 20), M('#d8c79e', 0.85));
   g.add(hem);
 
-  // 7) 长袖袖子 + 袖口内衬 + 双手
+  // 7) 长袖袖子 + 袖口内衬 + 双手（ArmL/ArmR 枢轴孩子的roup）
   const cuffMat = M('#d8c79e', 0.85);
+  const armL = new THREE.Group(); armL.name = 'ArmL'; armL.position.set(-0.155, 1.19, 0);
+  const armR = new THREE.Group(); armR.name = 'ArmR'; armR.position.set(0.155, 1.19, 0);
+  g.add(armL, armR);
+  g.userData.armL = armL;
+  g.userData.armR = armR;
   for (const s of [-1, 1]) {
+    const P = s < 0 ? armL : armR;
     const a = new THREE.Vector3(s * 0.155, 1.19, 0.0);
     const b = new THREE.Vector3(s * 0.125, 0.79, -0.14);
     const dir = b.clone().sub(a);
     const len = dir.length();
+    const mid = a.clone().add(b).multiplyScalar(0.5).sub(P.position);
     // 外袖（深色长袍）
     const slv = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, len, 8), M(robeDark));
-    slv.position.addVectors(a, b).multiplyScalar(0.5);
+    slv.position.copy(mid);
     slv.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-    g.add(slv);
+    P.add(slv);
     // 袖口那一段亮色内衬
     const clen = 0.14;
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.078, clen, 8), cuffMat);
     cuff.quaternion.copy(slv.quaternion);
     const n = dir.clone().normalize();
-    cuff.position.copy(b).addScaledVector(n, -clen / 2);
-    g.add(cuff);
+    cuff.position.copy(b).addScaledVector(n, -clen / 2).sub(P.position);
+    P.add(cuff);
     // 手
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), M(skin, 0.7));
-    hand.position.copy(b).add(new THREE.Vector3(0, -0.03, -0.02));
-    g.add(hand);
+    hand.position.copy(b).add(new THREE.Vector3(0, -0.03, -0.02)).sub(P.position);
+    P.add(hand);
   }
 
-  // 8) 脚：两条短深色椭圆
+  // 8) 双腿 & 鞋子（挂在 LegL/LegR 枢轴）
+  const legL = new THREE.Group(); legL.name = 'LegL'; legL.position.set(-0.10, 0.55, 0);
+  const legR = new THREE.Group(); legR.name = 'LegR'; legR.position.set(0.10, 0.55, 0);
+  g.add(legL, legR);
+  g.userData.legL = legL;
+  g.userData.legR = legR;
   for (const s of [-1, 1]) {
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), M(0x3a332a, 0.95));
-    foot.scale.set(0.8, 0.4, 1.6);
-    foot.position.set(s * 0.09, 0.05, -0.04);
-    g.add(foot);
+    const P = s < 0 ? legL : legR;
+    const pants = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.5, 8), M('#d9c9a8'));
+    pants.position.set(0, -0.25, 0);
+    P.add(pants);
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), M(0x3a332a, 0.95));
+    shoe.scale.set(0.8, 0.4, 1.6);
+    shoe.position.set(0, -0.50, -0.04);
+    P.add(shoe);
   }
 
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
