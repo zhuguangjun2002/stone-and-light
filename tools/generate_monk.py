@@ -187,12 +187,12 @@ armR = pivot('ArmR', 0.155, 0.0, 1.19)
 for sx in [-1, 1]:
     Piv = armL if sx < 0 else armR
     A = (sx * 0.155, 0.0, 1.19)
-    B = (sx * 0.125, 0.14, 0.79)
+    B = (sx * 0.22, 0.06, 0.78)
     v = Vector(B) - Vector(A)
     clen = 0.14
     sl = bone('Sleeve_%d' % sx, A, B, 0.052, 0.062, cape_mat)
     cu = bone('Cuff_%d' % sx, Vector(B) - v.normalized() * clen, B, 0.062, 0.078, liner_mat)
-    ha = sm('Hand_%d' % sx, sx * 0.125, 0.16, 0.76, 0.04, 1, 1, 1, skin_mat)
+    ha = sm('Hand_%d' % sx, sx * 0.23, 0.07, 0.747, 0.04, 1, 1, 1, skin_mat)
     for c in (sl, cu, ha):
         parent(c, Piv)
 

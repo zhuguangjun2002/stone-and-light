@@ -115,7 +115,7 @@ export function buildPerson() {
   for (const s of [-1, 1]) {
     const P = s < 0 ? armL : armR;
     const a = new THREE.Vector3(s * 0.155, 1.19, 0.0);
-    const b = new THREE.Vector3(s * 0.125, 0.79, -0.14);
+    const b = new THREE.Vector3(s * 0.22, 0.78, -0.06);
     const dir = b.clone().sub(a);
     const len = dir.length();
     const mid = a.clone().add(b).multiplyScalar(0.5).sub(P.position);
@@ -133,7 +133,7 @@ export function buildPerson() {
     P.add(cuff);
     // 手
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), M(skin, 0.7));
-    hand.position.copy(b).add(new THREE.Vector3(0, -0.03, -0.02)).sub(P.position);
+    hand.position.copy(b).add(new THREE.Vector3((s > 0 ? 0.01 : -0.01), -0.033, -0.01)).sub(P.position);
     P.add(hand);
   }
 
