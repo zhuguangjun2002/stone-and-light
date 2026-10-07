@@ -309,11 +309,13 @@ function cloisterWalk(len, mats, yOff, seed) {
   // 外实墙 + 小窗（与拱列同一组拱心，保持上下对位）
   const win = cxs.map((cx) => ({ cx, a: 0.55, y0: 1.75, springY: 2.5, k: 1.0 }));
   g.add(solid(wallWithOpenings(len, 0, H + 0.25, 0.6, win), mats.cloWallDark, 0, 0.02 + yOff, D - 0.1));
-  // 敞廊柱：半嵌在墙面上，给拱列两根细柱的读数；落在拱间的墙垛上
+  // 敞廊柱：半嵌在墙面上，给拱列两根细柱的读数；落在拱间的墙垛上。
+  // 柱子有 0.2 m 半径，最外一根要连柱身一起留在墙内，不能只卡柱心。
   const colG = new THREE.CylinderGeometry(0.2, 0.2, H, 8);
+  const colX = Math.min(len / 2 - 0.2);
   for (const cx of cxs) {
     for (const s of [-1, 1]) {
-      g.add(solid(colG, mats.cloWall, cx + s * pitch / 2, H / 2 + 0.02 + yOff, -0.06));
+      g.add(solid(colG, mats.cloWall, Math.min(colX, cx + s * pitch / 2), H / 2 + 0.02 + yOff, -0.06));
     }
   }
   // 单坡屋面：外高内低。朝下的底面（走廊顶）在阴影里只吃到天穹底色，不补一点就直接全黑，
