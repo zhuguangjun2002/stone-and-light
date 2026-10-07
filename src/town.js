@@ -90,6 +90,13 @@ function townMaterials() {
     lead: M('#61666d', 0.5, { metalness: 0.35 }),   // 檐沟 / 落水管
     gold: M('#c9a24a', 0.4, { metalness: 0.7 }),
     awning: [M('#8a3a34', 0.9), M('#3a5a6a', 0.9), M('#7a6a2a', 0.9)],
+    // 回廊是"半室内"：屋面盖住走廊，阴影里只有天穹底色漏一点，墙和顶会黑到读不出体量
+    // （实测屋面底面 RGB 1,2,2）。这四条是回廊专用材质，加一点自发光当作来自内院/天光的
+    // 漫射补光，把墙身和顶重新抬出来。不用全局 AmbientLight：教堂内部靠烘焙顶点色吃饭。
+    cloWall: M('#c4b9a1', 0.95, { emissive: '#4a4438' }),
+    cloWallDark: M('#a2957c', 0.95, { emissive: '#3e382e' }),
+    cloSlate: M('#4e5766', 0.8, { emissive: '#242a33' }),
+    cloPath: M('#948e80', 1, { emissive: '#332f28' }),
   };
 }
 
@@ -276,6 +283,16 @@ function buildGardens(mats) {
   return g;
 }
 
+// 一排等距洞口的拱心：间距按墙长收，保证最外一洞的外沿仍留在墙内、端头留得住墙垛。
+// 南北短翼的墙长只有 garth+depth=20.2（半宽 10.1）；若照长翼沿用 ±9.4 的拱心、半宽 1.55，
+// 最外洞口会探到 ±10.95、越过墙端。ExtrudeGeometry 对越界洞口的三角化会在越界处拉出
+// 一条细长片，渲出来就是回廊里那根"只有轮廓、没有实体"的悬空亮线（隐藏该墙即消失）。
+function bayCenters(len, a, n = 5, pad = 0.5) {
+  const room = Math.max(0, len / 2 - a - pad);
+  const pitch = Math.min(4.7, (room * 2) / (n - 1));
+  return Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * pitch);
+}
+
 // 回廊一翼：局部坐标里 x 沿长度、z=0 是朝内院的敞廊（尖拱列）、z=depth 是外实墙。
 // 四面各建一次再旋转摆位；彼此在角部略微重叠，四片的 y 各差几厘米，避免共面。
 function cloisterWalk(len, mats, yOff, seed) {
@@ -283,24 +300,25 @@ function cloisterWalk(len, mats, yOff, seed) {
   const D = CLO.depth, H = 4.4;
 
   // 地台
-  g.add(solid(new THREE.BoxGeometry(len, 0.32, D), mats.path, 0, 0.16 + yOff, D / 2));
+  g.add(solid(new THREE.BoxGeometry(len, 0.32, D), mats.cloPath, 0, 0.16 + yOff, D / 2));
   // 朝内院的敞廊：一排尖拱
-  const op = [];
-  for (let i = -2; i <= 2; i++) op.push({ cx: i * 4.7, a: 1.55, y0: 0, springY: 1.3, k: 1.0 });
-  g.add(solid(wallWithOpenings(len, 0, H, 0.5, op), mats.wall, 0, 0.02 + yOff, 0.1));
-  // 外实墙 + 小窗
-  const win = [];
-  for (let i = -2; i <= 2; i++) win.push({ cx: i * 4.7, a: 0.55, y0: 1.75, springY: 2.5, k: 1.0 });
-  g.add(solid(wallWithOpenings(len, 0, H + 0.25, 0.6, win), mats.wallDark, 0, 0.02 + yOff, D - 0.1));
-  // 敞廊柱：半嵌在墙面上，给拱列两根细柱的读数
+  const cxs = bayCenters(len, 1.55);
+  const pitch = cxs[1] - cxs[0];
+  const op = cxs.map((cx) => ({ cx, a: 1.55, y0: 0, springY: 1.3, k: 1.0 }));
+  g.add(solid(wallWithOpenings(len, 0, H, 0.5, op), mats.cloWall, 0, 0.02 + yOff, 0.1));
+  // 外实墙 + 小窗（与拱列同一组拱心，保持上下对位）
+  const win = cxs.map((cx) => ({ cx, a: 0.55, y0: 1.75, springY: 2.5, k: 1.0 }));
+  g.add(solid(wallWithOpenings(len, 0, H + 0.25, 0.6, win), mats.cloWallDark, 0, 0.02 + yOff, D - 0.1));
+  // 敞廊柱：半嵌在墙面上，给拱列两根细柱的读数；落在拱间的墙垛上
   const colG = new THREE.CylinderGeometry(0.2, 0.2, H, 8);
-  for (const i of [-2, -1, 0, 1, 2]) {
+  for (const cx of cxs) {
     for (const s of [-1, 1]) {
-      g.add(solid(colG, mats.wall, i * 4.7 + s * 2.35, H / 2 + 0.02 + yOff, -0.06));
+      g.add(solid(colG, mats.cloWall, cx + s * pitch / 2, H / 2 + 0.02 + yOff, -0.06));
     }
   }
-  // 单坡屋面：外高内低
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(len + 0.7, 0.3, D + 0.9), mats.slate);
+  // 单坡屋面：外高内低。朝下的底面（走廊顶）在阴影里只吃到天穹底色，不补一点就直接全黑，
+  // 所以屋面用回廊专用材质带一点自发光当漫射补光。
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(len + 0.7, 0.3, D + 0.9), mats.cloSlate);
   roof.rotation.x = -Math.atan2(1.1, D);
   roof.position.set(0, H + 0.95 + yOff, D / 2);
   roof.castShadow = roof.receiveShadow = true;

@@ -51,15 +51,40 @@ node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处
 node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7，exit 0
 node tools/check-brew.mjs           # 酿酒坊水路 7/7（屋面 30/30 + 30/30），exit 0
 node tools/check-poke.mjs           # 49 机位 0 处穿刺（按 userData.town 跳过领地）
-node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（合计 3507 px），exit 0
-                                    # 后端自报一行；--swiftshader → 3481 px 可移植基线
+node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（合计 3510 px），exit 0
+                                    # 后端自报一行；--swiftshader → 3488 px 可移植基线
 node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太阳走一天 48 档）
 node tools/check-npc.mjs            # 修士 NPC 走线 0 处蹭墙 / 0 处脚不沾地（约 2600 采样点）
 ```
 
+回廊改动只动了南北两翼敞廊墙的**洞口**（墙厚、位置、走道净宽都没变），所以 NPC 走线
+基线不受影响；flicker 合计 3507 → **3510**、软渲 3481 → **3488**（个位数像素级，
+两边均 exit 0），README 与本文件的基线已同步。
+
 ## 状态：已收尾（截至 2026-10-07）
 
-### 本轮：领地修士 NPC（walkers）
+### 本轮：回廊「只有轮廓、没有实体」的悬空亮线
+
+- **真因是几何越界，不是光照**：`cloisterWalk()` 里敞廊拱心写死 `cx = i*4.7`、拱半宽 1.55，
+  最外一洞外沿到 ±10.95；而南北短翼的墙长只有 `garth + depth = 20.2`（半宽 10.1），
+  **洞口探出墙端 0.85 m**。`ExtrudeGeometry` 对越界洞口的三角化会在越界处拉出一条细长片，
+  渲出来就是回廊里那根悬空的亮弧——"结构只有轮廓、没有实体"。长翼墙长 24.34 所以没事，
+  只有南北两翼中招。定位手法：逐个隐藏网格 → 隐藏该敞廊墙时亮线消失 → 平涂 ID 上色
+  确认同属一块 `ExtrudeGeometry`（见下 `tools/shot.html` 的 `__dbg`）。
+- **修法**：新增 `bayCenters(len, a)`，按墙长收拱距，保证最外洞口外沿仍留在墙内、端头留得住
+  墙垛。南北短翼 5 拱收到 4.025 m 间距，东西长翼仍是原来的 4.7 m（节奏不变）。外实墙小窗
+  与壁柱都改用这组拱心，小窗跟着对位、壁柱落在拱间墙垛上（原先最外两根在 ±11.75，
+  已经探到短翼墙外）。四角与内院实拍无穿模、无游离几何。
+- **走廊顶纯黑一并修掉**：走廊是屋面下的半室内空间，朝下的屋面底面在阴影里只吃到天穹底色，
+  实测 RGB 1,2,2。加了回廊专用材质 `cloWall` / `cloWallDark` / `cloSlate` / `cloPath`
+  （`townMaterials()` 里定义，仅回廊用），带一点自发光当作来自内院/天光的漫射补光，
+  把墙身和顶重新抬出体量。**不用全局 AmbientLight**：教堂内部靠烘焙顶点色吃饭，
+  全局环境光会把黑成一片的中厅洗白。
+- **诊断钩子留档**：`tools/shot.html` 加 `window.__dbg = { THREE, scene, r, hemi, sun }`，
+  可在 `page.evaluate` 里临时改光/换材质/单显某块网格；`tools/shoot-main.mjs` 加
+  `--bake=1`（默认 0 秒开，开了就等 `window.__baked` 再拍），用于主站烘焙对照。
+
+### 上一轮：领地修士 NPC（walkers）
 
 - **`src/walkers.js`**：7 位修士 NPC 沿各自动线行走——回廊南北走廊各一位来回踱步、
   一位绕内院水井转经；服务巷两位沿酒坊巡查（开放路来回）；西前庭集市一位；北侧墓地一位。
@@ -127,8 +152,8 @@ node tools/check-npc.mjs            # 修士 NPC 走线 0 处蹭墙 / 0 处脚�
   一份，**默认走本机 MX230**（ANGLE→Vulkan；`check-flicker` 全扫 24.6 s → 5.3 s，4.6×），
   `--swiftshader` / `CHROME_SW=1` 退回软渲染以复现跨机器基线；没显卡时 Chrome 自动回落，
   链路不会断。**Intel 核显别选**：强制走它 56 ms/帧，比软渲 45 ms/帧还慢。
-  `check-flicker` 开头自报一行"渲染后端"。基线：MX230 **3507 px**（连跑三次同一串数字）、
-  软渲 3481 px，两者均 exit 0；`check-poke` 在 GPU 下仍 0 穿刺。
+  `check-flicker` 开头自报一行"渲染后端"。基线：MX230 **3510 px**（连跑三次同一串数字）、
+  软渲 3488 px，两者均 exit 0；`check-poke` 在 GPU 下仍 0 穿刺。
 
 ### 上一轮（都已在 `main`）
 

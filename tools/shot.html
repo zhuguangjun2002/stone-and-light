@@ -95,4 +95,6 @@ window.__sunAt = (t) => {                       // 轨迹在 params.js，与 mai
 window.__shot = (px, py, pz, tx, ty, tz) => { cam.position.set(px, py, pz); cam.lookAt(tx, ty, tz); r.render(scene, cam); };
 window.__sunAt(0.55);
 window.__ready = true;
+// 诊断钩子（无头排查用）：暴露库/场景/渲染器，可在 page.evaluate 里临时改光或材质
+window.__dbg = { THREE, scene, r, hemi, sun };
 </script>
