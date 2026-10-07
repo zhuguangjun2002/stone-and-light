@@ -43,9 +43,19 @@ python3 -m http.server 8123
 **人物自检页**：`tools/monk.html`（<http://localhost:8123/tools/monk.html>）。
 把行走模式里那位第三人称替身站到一个铺石板的院落里，正/侧/背/全身/四分之三多角度
 的机位，并可以切成 `assets/monk.glb`（Blender 无头脚本 `tools/generate_monk.py`
-生成的同一款修士），左右按键即时对比：
+生成的同一款修士），两个版本都暴露出 `ArmL/ArmR/LegL/LegR` 枢轴节点——
+页面按钮「播放走路动画」时：
+
+- 程序化版 `src/person.js`：在 `requestAnimationFrame` 里用正弦驱动
+  `rotation.x = sin(phase)·0.55`, ArmL+LegR 同相位、ArmR+LegL 相位差 π；
+- Blender 版 `assets/monk.glb`：直接播它在 GLB 里保存的 4 条 walk clips
+  （命名 `walk_ArmL/ArmR/LegL/LegR`），由 `THREE.AnimationMixer.update(dt)` 推进。
+
+生成/导入命令：
 
     blender --background --python tools/generate_monk.py -- assets/monk.glb
+
+`assets/monk.glb` 现在含 4 条动画片段 + pivot 几何；第一键把按钮切换成"暂停走路动画"。
 
 ## 操作
 
@@ -89,6 +99,7 @@ URL 参数：`?view=3&section=1&labels=1&build=0.42&time=0.95&panel=1&tour=1&pre
 | `src/worksite.js` | 工地装备 | 脚手架（LineSegments 格架）、大车轮踏轮吊车、石料堆，跟随建造前沿移动 |
 | `src/audio.js` | 声音 | 钟声按真实钟的非谐泛音列（hum/prime/tierce…）合成；风、鸟、入堂圣咏垫，全部 Web Audio 无音频文件 |
 | `src/main.js` | 光照日夜、漫游 / 行走、剖面、标注、建造动画、设计面板 | 建造次序 = 区域（歌坛→耳堂→中厅逐开间→西立面→尖塔）+ 区域内自下而上；剖面用材质级裁剪；标注按室内 / 外分组并做屏幕空间去重 |
+| `src/person.js` | 第三人称替身 `buildPerson()`：长袍 / 披肩 / 兜帽 / 袖与里料 / 手腿 / 鞋 / 眼鼻须；四个枢轴组（ArmL/ArmR/LegL/LegR）存 `g.userData`，三.js/Blender两格中同名。 |
 
 ## 导览影片
 

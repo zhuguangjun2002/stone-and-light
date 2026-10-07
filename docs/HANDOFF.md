@@ -26,6 +26,7 @@
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
 | `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 六建筑 + 服务巷 + 院子排水 `buildBreweryDrain`）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
 | `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
+| `src/person.js` | 第三人称替身构造 `buildPerson()`（从 `main.js` 抽出）：长袍/斗篷/兜帽/里料袖、ArmL/ArmR/LegL/LegR 枢轴组、`userData` 存枢轴引用 |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
@@ -54,9 +55,30 @@ node tools/check-flicker.mjs        # 外观 0.02–0.17%、剖面 ≤0.31%（�
 node tools/check-shadow.mjs         # 阴影视锥 0 处越界（P.shadow，太阳走一天 48 档）
 ```
 
-## 状态：最近一轮（修道院酿酒）已收尾
+## 状态：已收尾（截至 2026-10-07）
 
-### 本轮：酿酒坊大院（未提交前先跑全量检查）
+### 本轮：修士模型 + 走路动画 v3
+
+- **第三人称 walk 模式**：`src/main.js` 按 F 进入第一人称后再按 **V** 切换第三人称，
+  相机挂在 ≈1.7 m 替身后面跟随移动。替身由 `src/person.js` 的 `buildPerson()` 构建，
+  `g.userData` 上有 `armL/armR/legL/legR` 四个枢轴组；替身挂在 `scene`
+  而非 `root`：不进碰撞网格、不进烘焙、不进 check-zfight/rain/poke/flicker.
+- **围墙已撤**：`ea4a711` 把外圈新墙、旧庭墙、西门门楼、8 角塔全部删除；
+  `SX2/NX2/EZ2` 常量保留仅作院落坐标基准。
+- **人物自检页 `tools/monk.html`**：修士站在铺石板院子中，正/侧/背/全身/四分之三机位、
+  环绕旋转、绿色 1.7 m 标尺杆、「换成 Blender 版」两个版本 (procedural / GLB) 即时对比。
+- **走路动画 v3**：Blender 脚本里 pivot empties (名为 `ArmL/ArmR/LegL/LegR`)
+  注入 5 keyframe rotation_euler.x 曲线 → GLB 内自带 4 条 clips（名 `walk_*`）；
+  `monk.html` 在按钮开后用 `THREE.AnimationMixer.update(dt)` 驱动 GLB 版、程序化版
+  用 JS 正弦驱动，两边节奏 1.2 s/圈 一致；「换成 Blender 版」toggle 共享同一组枢轴名。
+- `tools/monk.html` 的「播放走路动画 / 暂停走路动画」按钮：暂停时 stopAllAction+
+  所有节点 `rotation.x` 归零 → 静置姿势；再播放时 mixer 重回放。
+- **monk.html 光线调整**：光源从后方改到前上方 (-4, 9, -8)，半球光强度提到 1.15。
+- 文档参照：`docs/brewery-research.md`（修道院历史/ATP 三标准）、README 的
+  「人物自检页」小节。
+- headless 验证过一轮：0.8 s 时 ArmL+LegR 的 rot.x ≈ ±0.546 rad（amp 0.55），pause 归零。
+
+### 上一轮：酿酒坊大院（已在 `main`）
 
 - **扩地**：南 +20（`SX 56→76`）、东 +20（`EZ −58→−78`）、北 +12（`NX −52→−64`），西不动；
   原围墙降级为院内庭墙、立起双圈围墙（压顶高度错开 0.02–0.1 m 避共面，8 座角塔）——
