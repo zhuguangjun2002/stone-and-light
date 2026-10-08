@@ -1,4 +1,4 @@
-// 酿酒坊大院的水路：落在六座屋面上的雨，是不是真有一套东西接住、送走、最后离开系统。
+// 酿酒坊大院的水路：落在八座屋面上的雨，是不是真有一套东西接住、送走、最后离开系统。
 // 构件在 src/town.js 的 buildBreweryDrain 里打 userData.brew 标签
 // （roof / gutter / spout / channel / culvert / soak），关键几何由 brewInfo().drain 回传。
 // 这里只做正向连通校验；雨到底漏不漏，看 tools/check-rain.mjs（整座领地都归它管）。
@@ -106,5 +106,5 @@ for (const c of checks) console.log(`  ${c.ok ? '✓' : '✗'} ${c.name}  ——
 const bad = checks.filter((c) => !c.ok).length;
 console.log(`\n构件：roof×${cnt('roof')}  gutter×${cnt('gutter')}  spout×${cnt('spout')}  `
   + `channel×${cnt('channel')}  culvert×${cnt('culvert')}  soak×${cnt('soak')}`);
-console.log(bad ? `\n✗ 酿酒坊水路 ${bad} 处不通` : '\n✓ 酿酒坊水路完整：六座屋面的雨全部可被收集并送走');
+console.log(bad ? `\n✗ 酿酒坊水路 ${bad} 处不通` : '\n✓ 酿酒坊水路完整：八座屋面的雨全部可被收集并送走');
 if (bad) process.exitCode = 1;

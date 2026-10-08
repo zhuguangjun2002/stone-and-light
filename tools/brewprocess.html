@@ -1,0 +1,404 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>酿造工序 · 两条生产线</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6b7480; font: 14px/1.65 system-ui, sans-serif; color: #eef3f8; }
+  #ui { position: fixed; left: 12px; top: 12px; width: 316px; padding: 14px 16px; border-radius: 12px;
+        background: rgba(16,22,30,.84); backdrop-filter: blur(7px); box-shadow: 0 8px 30px #0006; }
+  #ui h1 { font-size: 17px; margin: 0 0 2px; }
+  #ui .sub { font-size: 12px; color: #93a6b8; margin-bottom: 10px; }
+  #ui .flow { font-size: 12px; color: #bfe0ff; background: #1d2b3a; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; line-height: 1.8; }
+  #ui .flow b { color: #7fd0ff; }
+  #ui .flow i { font-style: normal; color: #ffd070; }
+  #ui .flow u { text-decoration: none; color: #c99cff; }
+  #ui .chk { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12px; color: #cbd8e4; }
+  #ui .row { display: flex; gap: 8px; margin-top: 10px; }
+  #ui button { flex: 1; padding: 7px; border: 0; border-radius: 7px; background: #2f6ea8; color: #fff; font-size: 13px; cursor: pointer; }
+  #ui button.off { background: #3a4753; color: #9fb0c0; }
+  #ui button.wine { background: #6d4a97; }
+  #stages { margin-top: 12px; border-top: 1px solid #ffffff22; padding-top: 8px; max-height: 46vh; overflow: auto; }
+  #stages .grp { font-size: 11px; letter-spacing: .1em; color: #7f93a6; margin: 7px 0 2px; }
+  #stages div.it { padding: 4px 6px; border-radius: 6px; font-size: 12.5px; color: #b9c6d2; cursor: pointer; }
+  #stages div.it:hover { background: #ffffff14; color: #fff; }
+  #stages div.it.on { background: #2f6ea8; color: #fff; }
+  #tip { position: fixed; right: 12px; bottom: 12px; font-size: 12px; color: #c8d4de;
+         background: rgba(16,22,30,.72); padding: 8px 11px; border-radius: 9px; }
+  #cap { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: 74vw;
+         padding: 10px 18px; border-radius: 11px; background: rgba(16,22,30,.9); font-size: 14.5px;
+         color: #eaf6ff; box-shadow: 0 6px 24px #0007; display: none; }
+  #cap b { display: block; font-size: 15.5px; margin-bottom: 3px; }
+</style>
+
+<div id="ui">
+  <h1>酿造工序</h1>
+  <div class="sub">一条啤酒线、一条葡萄酒线：原料从哪来、在哪道工序变成酒</div>
+  <div class="flow">
+    <b>啤酒</b> 麦粒 → 粮仓 → 烘干窑 → 麦芽楼 → 煮酒房 → 冷却发酵 → 酒窖<br>
+    <u>葡萄酒</u> 葡萄 → 葡萄园 → 压榨房 → 葡萄酒窖
+  </div>
+  <div class="chk"><input id="xray" type="checkbox" checked><label for="xray" style="margin:0">透视墙体（看屋里的器具）</label></div>
+  <div class="chk"><input id="lab" type="checkbox" checked><label for="lab" style="margin:0">显示标注</label></div>
+  <div class="row">
+    <button id="runBeer">▶ 啤酒线（麦粒）</button>
+    <button id="runWine" class="wine">▶ 葡萄酒线（葡萄）</button>
+  </div>
+  <div class="row">
+    <button id="pause">暂停</button>
+    <button id="reset">复位视角</button>
+  </div>
+  <div id="stages"></div>
+</div>
+<div id="tip">拖动环视 · 滚轮远近 · 右键平移 &nbsp;|&nbsp; 点左侧工序飞过去看，或按 ▶ 让原料自己走一遍</div>
+<div id="cap"></div>
+
+<script type="importmap">
+  { "imports": { "three": "../lib/three.module.js" } }
+</script>
+<script type="module">
+// 酿造工序演示：两颗原料（麦粒 / 葡萄）沿着各自那条线跑一遍，
+// 走到哪座房子，屋里那套器具就点亮，字幕说清这一步在做什么。
+//
+// **所有坐标只有一份**：src/town.js 的 brewInfo().process（与 BREW 表、器具几何同源），
+// 页面里不另抄任何世界坐标。跟 drainageInfo() / brewInfo().drain 一个套路。
+import * as THREE from '../lib/three.module.js';
+import { OrbitControls } from '../lib/OrbitControls.js';
+import { buildCathedral } from '../src/cathedral.js';
+import { brewInfo } from '../src/town.js';
+import { P } from '../src/params.js';
+
+const B = brewInfo();
+const S = B.process;
+const LINES = {
+  beer: { label: '啤酒线', color: '#ffcf7a', size: [1.5, 1.0],
+    keys: ['granary', 'kiln', 'malthouse', 'brewhouse', 'cooling', 'cellar'] },
+  wine: { label: '葡萄酒线', color: '#c99cff', size: [1.3, 1.3],
+    keys: ['vineyard', 'press', 'winecellar'] },
+};
+const idxOf = new Map(S.map((s, i) => [s.key, i]));
+const st = (k) => S[idxOf.get(k)];
+
+// ---------- 场景 ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#6b7480');
+scene.fog = new THREE.FogExp2('#6b7480', 0.0028);
+scene.add(new THREE.HemisphereLight('#b6c6d6', '#585a52', 1.15));
+const sun = new THREE.DirectionalLight('#d6dee6', 0.9);
+sun.position.set(130, 110, 70);
+sun.target.position.set(66, 0, 12);
+sun.castShadow = true;
+{
+  const Sh = P.shadow;
+  sun.shadow.mapSize.set(Sh.map, Sh.map);
+  sun.shadow.camera.left = -Sh.H; sun.shadow.camera.right = Sh.H;
+  sun.shadow.camera.top = Sh.top; sun.shadow.camera.bottom = Sh.bottom;
+  sun.shadow.camera.near = Sh.near; sun.shadow.camera.far = Sh.far;
+  sun.shadow.bias = Sh.bias;
+}
+scene.add(sun, sun.target);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48), new THREE.MeshStandardMaterial({ color: '#6d7360' }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true;
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210), new THREE.MeshStandardMaterial({ color: '#7d7c76' }));
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(6, -0.08, 10); plaza.receiveShadow = true;
+scene.add(ground, plaza);
+
+const root = buildCathedral().root;
+scene.add(root);
+scene.updateMatrixWorld(true);
+
+// ---------- 透视墙体 ----------
+// 点亮的那套器具用的是**克隆出来的新材质**，不在 ghost 名单里，
+// 所以开着透视时它是唯一不透明、还在发光的东西——一眼就看得出"看这里"。
+const ghost = [];
+const collect = (o) => o.traverse((m) => {
+  if (!m.isMesh) return;
+  for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) {
+    if (mat && !mat.userData.glazing && !ghost.includes(mat)) ghost.push(mat);
+  }
+});
+collect(root); collect(ground); collect(plaza);
+let xray = true;
+function applyXray() {
+  for (const m of ghost) {
+    if (m.userData._orig === undefined) m.userData._orig = { t: m.transparent, o: m.opacity, d: m.depthWrite };
+    const o = m.userData._orig;
+    m.transparent = xray ? true : o.t;
+    m.opacity = xray ? 0.26 : o.o;
+    m.depthWrite = xray ? false : o.d;
+    m.needsUpdate = true;
+  }
+}
+applyXray();
+
+// ---------- 每座房子的器具（靠 buildBrewery 挂的 brewKey 分组）----------
+const gearOf = new Map();
+root.traverse((o) => {
+  if (!o.isMesh || !o.userData.gear) return;
+  let p = o.parent;
+  while (p && !p.userData.brewKey) p = p.parent;
+  if (!p) return;
+  const k = p.userData.brewKey;
+  if (!gearOf.has(k)) gearOf.set(k, []);
+  gearOf.get(k).push(o);
+});
+let hlKey = null;
+function setHL(key) {
+  if (key === hlKey) return;
+  if (hlKey) for (const m of gearOf.get(hlKey) || []) {
+    if (m.userData._saved) { m.material = m.userData._saved; m.userData._saved = null; }
+  }
+  hlKey = key;
+  for (const m of gearOf.get(hlKey) || []) {
+    if (!m.userData._hl) {
+      const c = m.material.clone();
+      if (c.color) c.color.lerp(new THREE.Color('#fff0cf'), 0.3);
+      if (c.emissive) { c.emissive = new THREE.Color('#ffcf7a'); c.emissiveIntensity = Math.max(c.emissiveIntensity || 0, 1.1); }
+      m.userData._hl = c;
+    }
+    m.userData._saved = m.material;
+    m.material = m.userData._hl;
+  }
+}
+
+// ---------- 标注 ----------
+function labelSprite(text, stroke) {
+  const c = document.createElement('canvas'), s = 2;
+  c.width = 320 * s; c.height = 46 * s;
+  const g = c.getContext('2d'); g.scale(s, s);
+  g.fillStyle = 'rgba(18,28,40,.88)'; g.beginPath(); g.roundRect(0, 0, 320, 46, 9); g.fill();
+  g.strokeStyle = stroke; g.lineWidth = 2; g.stroke();
+  g.fillStyle = '#e6f1fb'; g.font = 'bold 20px system-ui, sans-serif'; g.textBaseline = 'middle';
+  g.fillText(text, 12, 24);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  sp.scale.set(7.6, 1.1, 1);
+  return sp;
+}
+const labelGroup = new THREE.Group();
+scene.add(labelGroup);
+for (const b of B.buildings) {
+  const s = labelSprite(`${b.name}（${b.stage}）`, '#7fd0ff');
+  s.position.set((b.x0 + b.x1) / 2, b.ridgeY + 2.2, (b.z0 + b.z1) / 2);
+  labelGroup.add(s);
+}
+{
+  const v = st('vineyard');
+  const s = labelSprite('葡萄园（收葡萄 · 原料）', '#c99cff');
+  s.position.set(v.cx, 4.6, v.cz);
+  labelGroup.add(s);
+}
+
+// ---------- 走线路径：每道工序在巷边的"门口点" ----------
+// 门口点全部落在服务巷（x 57.5…61.5）或它东侧的空地上，所以原料不会穿墙，
+// 也不会横穿葡萄酒窖（那座 x ≥ 62.4）。葡萄园没有房子，用它自己的点。
+function doorPt(s) {
+  const b = B.buildings.find((x) => x.key === s.key);
+  return new THREE.Vector3(b ? b.x0 - 2.6 : s.out.x + 12, 1.5, s.cz);
+}
+
+// ---------- 原料粒子（麦粒 / 葡萄）----------
+function dotTex(rgb) {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.35, rgb.replace('A', '0.95'));
+  gr.addColorStop(1, rgb.replace('A', '0'));
+  g.fillStyle = gr; g.beginPath(); g.ellipse(32, 32, 30, 30, 0, 0, 7); g.fill();
+  return new THREE.CanvasTexture(c);
+}
+const tracer = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex('rgba(255,205,110,A)'), depthTest: false, transparent: true }));
+tracer.scale.set(1.5, 1.0, 1);
+tracer.visible = false;
+scene.add(tracer);
+const tail = [];
+for (let i = 1; i <= 6; i++) {
+  const f = 1 - i / 7;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex('rgba(255,210,130,A)'), depthTest: false, transparent: true, opacity: f * 0.8 }));
+  sp.scale.set(0.9 * f + 0.3, 0.6 * f + 0.2, 1);
+  sp.visible = false;
+  scene.add(sp); tail.push(sp);
+}
+
+// ---------- 相机 ----------
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.2, 3000);
+camera.position.set(30, 34, 56);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(66, 5, 14);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxDistance = 300;
+const VIEW0 = { pos: [30, 34, 56], tgt: [66, 5, 14] };
+const camGoal = camera.position.clone();
+const focusGoal = controls.target.clone();
+const FOLLOW = new THREE.Vector3(-11, 7.5, -8);   // 跟随时的机位偏移：站在巷子西边、略高，正对那排房子
+let flying = false;
+controls.addEventListener('start', () => { flying = false; stopRun(); });
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- 字幕与工序表 ----------
+const $ = (id) => document.getElementById(id);
+const cap = $('cap');
+let lastCap = '';
+function showCap(title, text) {
+  const k = title + text;
+  if (k === lastCap) return;
+  lastCap = k;
+  cap.innerHTML = `<b>${title}</b>${text}`;
+  cap.style.display = 'block';
+}
+const stagesEl = $('stages');
+const rows = new Map();
+for (const [lk, L] of Object.entries(LINES)) {
+  const h = document.createElement('div');
+  h.className = 'grp';
+  h.textContent = lk === 'beer' ? '● 啤酒线（6 站）' : '● 葡萄酒线（3 站）';
+  h.style.color = L.color;
+  stagesEl.appendChild(h);
+  for (const k of L.keys) {
+    const s = st(k);
+    const d = document.createElement('div');
+    d.className = 'it'; d.textContent = s.title;
+    d.onclick = () => { stopRun(); gotoStage(s); };
+    stagesEl.appendChild(d);
+    rows.set(s.key, d);
+  }
+}
+function markActive(key) {
+  for (const [k, el] of rows) el.classList.toggle('on', k === key);
+}
+function gotoStage(s) {
+  setHL(s.noHouse ? null : s.key);
+  markActive(s.key);
+  showCap(s.title, s.text);
+  camGoal.set(s.out.x, s.out.y, s.out.z);
+  focusGoal.set(s.in.x, s.in.y, s.in.z);
+  flying = true;
+}
+
+// ---------- 走线 ----------
+let run = null;          // { pts:[{p,s}], i, s, wait }
+let paused = false;
+function stopRun() {
+  if (!run) return;
+  run = null;
+  tracer.visible = false;
+  for (const t of tail) t.visible = false;
+  $('runBeer').textContent = '▶ 啤酒线（麦粒）';
+  $('runWine').textContent = '▶ 葡萄酒线（葡萄）';
+  $('runBeer').classList.remove('off');
+  $('runWine').classList.remove('off');
+}
+function startRun(line) {
+  const L = LINES[line];
+  const pts = L.keys.map((k) => { const s = st(k); return { p: doorPt(s), s }; });
+  run = { pts, i: 0, s: 0, wait: 0.4 };
+  tracer.visible = true;
+  tracer.material.map = dotTex(line === 'beer' ? 'rgba(255,205,110,A)' : 'rgba(190,140,255,A)');
+  tracer.material.needsUpdate = true;
+  tracer.scale.set(L.size[0], L.size[1], 1);
+  tracer.position.copy(pts[0].p);
+  for (const t of tail) t.visible = true;
+  activate(pts[0].s);
+  $('runBeer').textContent = line === 'beer' ? '■ 啤酒线走完' : '▶ 啤酒线（麦粒）';
+  $('runWine').textContent = line === 'wine' ? '■ 葡萄酒线走完' : '▶ 葡萄酒线（葡萄）';
+  $('runBeer').classList.toggle('off', line !== 'beer');
+  $('runWine').classList.toggle('off', line !== 'wine');
+  flying = true;
+}
+function activate(s) {
+  setHL(s.noHouse ? null : s.key);
+  markActive(s.key);
+  showCap(s.title, s.text);
+}
+const SPEED = 7.5, DWELL = 4.0;
+const _a = new THREE.Vector3();
+
+function stepRun(dt) {
+  if (!run) return;
+  if (run.wait > 0) run.wait -= dt;
+  else if (run.i < run.pts.length - 1) {
+    const a = run.pts[run.i].p, b = run.pts[run.i + 1].p;
+    run.s += SPEED * dt;
+    const d = a.distanceTo(b);
+    if (run.s >= d) {
+      run.s = 0; run.i++;
+      activate(run.pts[run.i].s);
+      run.wait = DWELL;
+      tracer.position.copy(run.pts[run.i].p);
+    } else {
+      tracer.position.lerpVectors(a, b, run.s / d);
+    }
+  } else {
+    stopRun();
+    return;
+  }
+  // 拖尾跟着麦粒
+  for (let i = 0; i < tail.length; i++) {
+    const back = (i + 1) * 1.6;
+    const a = run.pts[run.i].p;
+    const prev = run.pts[Math.max(0, run.i - 1)].p;
+    _a.copy(tracer.position);
+    const seg = a.distanceTo(prev);
+    if (seg > 0.01) _a.addScaledVector(a.clone().sub(prev).normalize(), -Math.min(back, run.s));
+    tail[i].position.copy(_a);
+    tail[i].material.map = tracer.material.map;
+  }
+  camGoal.copy(tracer.position).add(FOLLOW);
+  focusGoal.copy(tracer.position);
+}
+
+$('runBeer').onclick = () => (run ? stopRun() : startRun('beer'));
+$('runWine').onclick = () => (run ? stopRun() : startRun('wine'));
+$('xray').onchange = () => { xray = $('xray').checked; applyXray(); };
+$('lab').onchange = () => { labelGroup.visible = $('lab').checked; };
+$('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? '继续' : '暂停'; $('pause').classList.toggle('off', paused); };
+$('reset').onclick = () => { stopRun(); camGoal.set(...VIEW0.pos); focusGoal.set(...VIEW0.tgt); flying = true; };
+
+// ---------- 动画 ----------
+const clock = new THREE.Clock();
+function frame() {
+  const dt = Math.min(0.05, clock.getDelta());
+
+  if (!paused) stepRun(dt);
+
+  if (flying) {
+    const k = 1 - Math.pow(0.004, dt);
+    camera.position.lerp(camGoal, k);
+    controls.target.lerp(focusGoal, k);
+    if (camera.position.distanceTo(camGoal) < 0.05 && !run) flying = false;
+    camera.lookAt(controls.target);
+  } else {
+    controls.update();
+  }
+
+  // 标注保持屏幕大小
+  const kLab = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / innerHeight * 24;
+  for (const s of labelGroup.children) {
+    const h = camera.position.distanceTo(s.position) * kLab;
+    s.scale.set(h * 6.8, h, 1);
+  }
+
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(frame);
+
+window.__ready = true;
+window.__view = (px, py, pz, tx, ty, tz) => {
+  stopRun();
+  camera.position.set(px, py, pz); controls.target.set(tx, ty, tz);
+  camGoal.copy(camera.position); focusGoal.copy(controls.target); flying = false;
+};
+window.__goto = (key) => { stopRun(); gotoStage(st(key)); };
+window.__run = (line) => { stopRun(); startRun(line); };
+window.__xray = (on) => { xray = !!on; const el = document.getElementById('xray'); if (el) el.checked = xray; applyXray(); };
+window.__cam = () => `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
+</script>

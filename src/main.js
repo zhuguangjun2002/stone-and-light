@@ -503,11 +503,19 @@ function applySection(planes) {
 // 真教堂的门平时是关的：巨门要几个人合力才推得开，日常从门板上挖的便门进出；
 // 雨雪天更是关着。所以"晴天"的默认状态是中门与南耳堂门开便门，其余关死。
 let doors = [];
+// 领地的门（酒坊六扇）不进面板的小平面图，也不管 `K` 键：
+// 那张图画的是大教堂的十字平面（viewBox 只盖到 x = ±27），酒坊门在 x ≈ 62 会落到图外；
+// `K` 键本来是"五座门全开 ⇄ 全关"，加了六扇就成了十三扇一起动。
+// 酒坊门靠第一人称走到门前按 `E` 单独开关，雨雪天照样跟着天气关。
+const churchDoors = () => doors.filter((d) => !d.town);
 function refreshDoorUI() {
   const info = document.getElementById('doorInfo');
   if (info) {
-    const open = doors.filter((d) => d.state !== 'closed');
-    info.textContent = open.length ? `开着：${open.map((d) => `${d.name}（${STATE_NAMES[d.state]}）`).join('、')}` : '五座门全关';
+    const open = churchDoors().filter((d) => d.state !== 'closed');
+    const brewOpen = doors.filter((d) => d.town && d.state !== 'closed').length;
+    info.textContent = (open.length
+      ? `开着：${open.map((d) => `${d.name}（${STATE_NAMES[d.state]}）`).join('、')}`
+      : '五座门全关') + (brewOpen ? `；酒坊 ${brewOpen} 扇开着` : '');
   }
   for (const d of doors) {
     const el = document.getElementById(`dot-${d.id}`);
@@ -521,9 +529,11 @@ function cycleDoor(d) {
   toast(`${d.name}：${STATE_NAMES[d.state]}`);
   refreshDoorUI();
 }
-function setAllDoors(state, instant = false) {
+// list 默认全体（天气就是这么用的：雨雪天全关，酒坊的门也该关）；
+// `K` 键只传大教堂那五扇进去。
+function setAllDoors(state, instant = false, list = doors) {
   let changed = false;
-  for (const d of doors) {
+  for (const d of list) {
     const want = state === 'wicket' && !d.hasWicket ? 'closed' : state;
     if (d.state !== want) changed = true;
     setDoorState(d, want, instant);
@@ -551,7 +561,7 @@ function buildDoorPlan() {
     <text class="lab" x="2" y="6">北</text><text class="lab" x="${W - 8}" y="${H - 2}">西</text>
     <g id="doorDots"></g></svg>`;
   const g = host.querySelector('#doorDots');
-  for (const d of doors) {
+  for (const d of churchDoors()) {     // 领地的门画不进这张十字平面，见 churchDoors() 的注释
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     c.setAttribute('class', 'dot'); c.setAttribute('id', `dot-${d.id}`);
     c.setAttribute('cx', px(d.z)); c.setAttribute('cy', py(d.x)); c.setAttribute('r', '2.8');
@@ -1120,8 +1130,9 @@ function doAction(name) {
       else toast('走到门前再按 E');
       break;
     case 'doors': {
-      const anyOpen = doors.some((d) => d.state !== 'closed');
-      setAllDoors(anyOpen ? 'closed' : 'open');
+      const five = churchDoors();      // 只管大教堂那五座，见 churchDoors() 的注释
+      const anyOpen = five.some((d) => d.state !== 'closed');
+      setAllDoors(anyOpen ? 'closed' : 'open', false, five);
       toast(anyOpen ? '五座门全关' : '五座门全开');
       break;
     }

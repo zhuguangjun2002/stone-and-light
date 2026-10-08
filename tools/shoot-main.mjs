@@ -17,6 +17,9 @@ const PORT = +arg('port', 8241);
 const OUT = arg('out', path.join(os.tmpdir(), 'church-main'));
 const [W, H] = arg('size', '1280x720').split('x').map(Number);
 const BAKE = arg('bake', '0');   // 默认 0（秒开）；--bake=1 打开室内烘焙对照
+// 其余 URL 参数原样透传（?labels=1 开结构标注、?view=3…?section=1…），
+// 拍标注/剖面这类"要切一个开关才看得见"的画面时不用改这个脚本。
+const EXTRA = arg('q', '');    // 例：--q=labels=1&section=1
 const shots = process.argv.filter((s) => s.startsWith('--at=')).map((a) => a.slice(5).split(',').map(Number));
 if (!shots.length) { console.error('给出 --at=px,py,pz,tx,ty,tz'); process.exit(1); }
 
@@ -35,7 +38,8 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
 const page = await browser.newPage();
 await page.setViewport({ width: W, height: H });
 page.on('pageerror', (e) => console.error('PAGE ERR:', e.message));
-await page.goto(`http://localhost:${PORT}/index.html?bake=${BAKE}`, { waitUntil: 'load', timeout: 120000 });
+await page.goto(`http://localhost:${PORT}/index.html?bake=${BAKE}${EXTRA ? '&' + EXTRA : ''}`,
+  { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction('window.__lookAt && window.__walkers', { timeout: 120000 });
 if (BAKE !== '0') await page.waitForFunction('window.__baked === true', { timeout: 180000 });
 // NPC 正面朝我们：先推进一小段，让人别贴着原点站着

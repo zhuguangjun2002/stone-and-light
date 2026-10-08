@@ -30,7 +30,11 @@ export function collectDoors(root) {
     const w = wickets[0];
     const wc = w ? w.localToWorld(new THREE.Vector3(w.userData.door.width / 2, 0, 0)) : null;
     doors.push({
-      id: o.userData.doorId, name: DOOR_NAMES[o.userData.doorId] ?? o.userData.doorId,
+      id: o.userData.doorId,
+      // 大教堂的五座门在 DOOR_NAMES 里有正式名字；领地里的门（酒坊的六扇）由 town.js
+      // 在门组上挂 doorName 直接给（名字跟 BREW 表走，别在两个文件里各抄一遍）。
+      name: DOOR_NAMES[o.userData.doorId] ?? o.userData.doorName ?? o.userData.doorId,
+      town: !!o.userData.doorTown,
       leaves, wickets, hasWicket: wickets.length > 0,
       x: +p.x.toFixed(2), z: +p.z.toFixed(2), state: 'closed',
       // 碰撞用：门在哪个轴上、门洞半宽、便门中心与半宽

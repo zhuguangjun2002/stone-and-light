@@ -27,9 +27,9 @@
 
 <div id="ui">
   <h1>酿酒坊的水</h1>
-  <div class="sub">六座酒坊的雨水，一路怎么收、怎么走、最后去哪</div>
+  <div class="sub">八座酒坊的雨水，一路怎么收、怎么走、最后去哪</div>
   <div class="flow">
-    屋面（六座）→ <b>檐沟</b>（贴巷一面）→ <b>集水管</b>（找齐）→<br>
+    屋面（八座）→ <b>檐沟</b>（贴巷一面）→ <b>集水管</b>（找齐）→<br>
     <b>落水管</b>（巷东缘一列）→ <b>明沟</b>（服务巷东缘，通长）→<br>
     <b>暗管</b>（东端出口转入地下）→ <b>渗井</b>（渗入地下）
   </div>
@@ -219,7 +219,7 @@ const TRACE_CAP = [
   '① 雨落在煮酒房屋面：脊高檐低，水顺坡往贴巷的檐口走',
   '② 越过檐口，落进檐沟',
   '③ 沿檐沟流向东端的落水口',
-  '④ 转入集水管，横着找齐到巷边的落水管线（六座的檐口深浅不一样）',
+  '④ 转入集水管，横着找齐到巷边的落水管线（八座的檐口深浅不一样）',
   '⑤ 进落水管，直落到地面',
   '⑥ 落进服务巷东缘的明沟',
   '⑦ 沿明沟一路往东',
@@ -290,7 +290,7 @@ function labelSprite(text) {
 const labelGroup = new THREE.Group();
 scene.add(labelGroup);
 const putLabel = (text, x, y, z) => { const s = labelSprite(text); s.position.set(x, y, z); labelGroup.add(s); };
-putLabel('① 屋面（六座连排）', 68, 15.5, 40);
+putLabel('① 屋面（八座连排）', 68, 15.5, 40);
 putLabel('② 檐沟（贴巷一面）', 61.4, 9.8, 34);
 putLabel('③ 落水管（巷东缘一列）', 63.5, 6.5, 24);
 putLabel('④ 服务巷明沟', 61.4, 2.6, 6);
@@ -298,7 +298,7 @@ putLabel('⑤ 暗管（地下）', 61.5, 2.2, -43);
 putLabel('⑥ 渗井（终点）', 61.5, 3.4, -47.5);
 for (const r of D.runs) {
   const b = B.buildings.find((x) => x.key === r.key);
-  putLabel(b.name, r.ridgeX, r.ridgeY + 2.6, (r.z0 + r.z1) / 2);
+  putLabel(`${b.name}（${b.stage}）`, r.ridgeX, r.ridgeY + 2.6, (r.z0 + r.z1) / 2);
 }
 
 // ---------- 相机 & 视角 ----------
@@ -313,7 +313,7 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 const STAGES = [
-  ['① 屋面：六座连排，脊高檐低', [88, 36, 26], [66, 9, 24], false],
+  ['① 屋面：八座连排，脊高檐低', [88, 36, 26], [66, 9, 24], false],
   ['② 檐沟：贴巷一面的铅皮槽', [46, 13, 20], [63, 8, 16], false],
   ['③ 落水管：巷东缘一列直落到地', [50, 7, 14], [62, 3.5, 9], false],
   ['④ 明沟：服务巷东缘，通长一条', [46, 10, 44], [61.5, 0.5, 8], false],
