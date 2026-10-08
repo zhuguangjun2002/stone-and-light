@@ -127,20 +127,32 @@ function kiln(g, mats, rnd, w, d, h) {
 function malthouse(g, mats, rnd, w, d, h) {
   // 两层地板：下层 0.9 m（放麦芽、下面进风），上层 h - 0.5（摊麦芽、采光）
   const zC = -d / 2 + T + (d - 2 * T) / 2;
-  for (const [fy, fw] of [[0.9, d - 2 * T - 0.6], [h - 0.55, d - 2 * T - 0.6]]) {
-    g.add(solid(new THREE.BoxGeometry(w - 2 * T - 0.4, 0.14, fw), mats.brewBeam, 0, fy, zC));
+  // 门内走道：西墙内皮往里 3.8 m 这条带子里不许有**齐腰以上**的家伙（tools/check-gear「门口净空」；
+  // 麻布叠只有 0.44 m 高，在腰射线 0.55 以下，从脚边过去，不算挡路）。
+  // 原来下层地板与厚麦芽堆铺满全屋、离西墙只剩 0.7 m，麦芽堆顶面 1.64 比眼位 1.7 只低 6 cm，
+  // 一开门就是一堵齐脸的麦芽墙，腰（0.55）头（1.55）两档射线全打在上面，一步都进不去。
+  const xW = -w / 2 + T, xE = w / 2 - T;
+  const WALK = xW + 3.8;
+  const fw = d - 2 * T - 0.6;
+  for (const [fy, fx0, fx1] of [
+    [0.9, WALK, xE - 0.2],                 // 下层：只铺东半边，西边留出走道
+    [h - 0.55, -xE + 0.2, xE - 0.2]]) {    // 上层：满跨（在头顶 8 m 高处，不挡路）
+    const fs = fx1 - fx0, fc = (fx0 + fx1) / 2;
+    g.add(solid(new THREE.BoxGeometry(fs, 0.14, fw), mats.brewBeam, fc, fy, zC));
     // 地板下的托梁，一排排从下面看得见
     for (let i = 0; i < 7; i++) {
       const z = zC - fw / 2 + (i + 0.5) * (fw / 7);
-      g.add(solid(new THREE.BoxGeometry(w - 2 * T - 0.4, 0.2, 0.16), mats.brewBeam, 0, fy - 0.16, z));
+      g.add(solid(new THREE.BoxGeometry(fs, 0.2, 0.16), mats.brewBeam, fc, fy - 0.16, z));
     }
   }
   // 上层地板四周的矮栏杆（翻麦芽时挡着人）
   for (const s of [-1, 1]) {
     g.add(solid(new THREE.BoxGeometry(0.1, 0.7, d - 2 * T - 0.6), mats.brewWood, s * (w / 2 - T - 0.2), h - 0.55 + 0.42, zC));
   }
-  // 厚麦芽堆：下层 0.6 m 厚（顶面 1.54）。
-  g.add(solid(new THREE.BoxGeometry(w - 2 * T - 1.4, 0.6, d - 2 * T - 1.8), mats.malt, 0, 1.24, zC));
+  // 厚麦芽堆：下层 0.6 m 厚（顶面 1.54）。跟着下层地板一起缩到东半边，西边留出走道。
+  // 堆的西沿比地板西沿再往东 0.5 m：齐平就跟地板侧面共成一个面（check-zfight 判共面）。
+  const pX0 = WALK + 0.5, pX1 = xE - 0.7;
+  g.add(solid(new THREE.BoxGeometry(pX1 - pX0, 0.6, d - 2 * T - 1.8), mats.malt, (pX0 + pX1) / 2, 1.24, zC));
   // 麻布叠放在**下层地板中间的空档里**，不是紧贴墙根：地板托梁顶面在 1.05，
 // 麻布叠最高 0.34，再靠墙摆时叠顶（1.05）与梁顶只差 2 cm，check-zfight 判成共面。
   const clX = -w / 2 + T + 1.5, clZ = zC - (d - 2 * T) / 2 + 2.4;
@@ -152,9 +164,11 @@ function malthouse(g, mats, rnd, w, d, h) {
   for (const s of [-1, 1]) {
     g.add(solid(new THREE.BoxGeometry(w - 2 * T - 1.6, 0.12, 1.5), mats.malt, 0, h - 0.41, zC + s * 1.9));
   }
-  // 墙上通风百叶（下层地板下面进风）：一排小木条
-  for (let i = 0; i < 6; i++) {
-    const z = zC - (d - 2 * T - 1.6) / 2 + (i + 0.5) * ((d - 2 * T - 1.6) / 6);
+  // 墙上通风百叶（下层地板下面进风）：门两边各三片，**要绕开门洞**。
+  // 原先 6 片沿墙均分，落在门心 ±1.11 的两片正好骑在 3.6 m 宽的门洞里（离地 0.40…0.84 m），
+  // 门缝被夹到只剩 0.56 m 宽，人要贴着门心 ±0.28 m 才挤得进去。
+  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
+    const z = zC + s * (Math.min(3.6, d - 3) / 2 + 0.9 + i * 1.6);
     g.add(solid(new THREE.BoxGeometry(0.1, 0.44, 0.9), mats.brewWood, -w / 2 + T + 0.05, 0.52, z));
   }
   // 耙子：靠西墙（x0 那面）斜靠一把，把一把插在麦芽堆里
@@ -196,9 +210,13 @@ function brewhouse(g, mats, rnd, w, d, h) {
   // 锅里的麦汁：铜锅内一层深色液面。半径 1.18 比锅壁 1.25 小 7 cm、深度比锅口低 6 cm，
   // 两头都留出缝，免得与锅壁、与锅口共面。
   g.add(solid(new THREE.CylinderGeometry(1.18, 1.18, 0.05, 20), mats.wort, stX, 2.78, stZ));
-  // 糖化槽 ×2：带盖的大木槽，槽沿比槽身高一圈
+  // 糖化槽 ×2：带盖的大木槽，槽沿比槽身高一圈。
+  // **不能摆在门后**：原来槽身离西墙内皮只有 0.85 m，槽沿（y 1.53…1.67）与槽盖（1.45…1.99）
+  // 正好骑在 1.55 m 那档头高射线上，槽身又跨过 0.55 m 腰高射线 —— 一开门两条路全断，
+  // 第一人称一步都进不去（tools/check-gear 的「门口净空」一节）。往东挪 2.9 m 到屋当中，
+  // 门里让出 3.8 m 净空带；槽北还剩 3.0 m、槽南还剩 5.2 m 的余宽，绕过去都通。
   for (let i = 0; i < 2; i++) {
-    const tx = -w / 2 + T + 1.7, tz = zC - 2.6 + i * 3.0;
+    const tx = -w / 2 + T + 4.6, tz = zC - 2.6 + i * 3.0;
     g.add(solid(new THREE.BoxGeometry(1.7, 1.5, 2.2), mats.brewWood, tx, 0.75, tz));
     for (const [bw, bh, bd, bx, by, bz] of [
       [1.85, 0.14, 0.14, 0, 1.5, -1.1], [1.85, 0.14, 0.14, 0, 1.5, 1.1],
@@ -223,9 +241,12 @@ function brewhouse(g, mats, rnd, w, d, h) {
   // 槽帮（挡板）**嵌进槽身**、并且两根帮错开一点距离：贴在壁上时两者只差 2.5 cm，
   // check-zfight 判成共面（两处 0.8 m²）。帮改成压进槽身、两帮中心距 0.34。
   const pipeY = 2.0;
-  g.add(solid(new THREE.BoxGeometry(4.2, 0.3, 0.4), mats.brewBeam, -0.6, pipeY, zC - 0.6));
-  g.add(solid(new THREE.BoxGeometry(4.2, 0.5, 0.14), mats.brewBeam, -0.6, pipeY + 0.2, zC - 0.56));
-  g.add(solid(new THREE.BoxGeometry(4.2, 0.5, 0.14), mats.brewBeam, -0.6, pipeY + 0.2, zC - 0.22));
+  // 槽身从 4.2 m 收成 1.9 m（x 0.4…2.3）：糖化槽东挪后，原来的槽有 1.45 m 会悬在门里走道的
+  // 半空上。西端仍压进槽东沿（0.45）；东端朝锅那侧（锅前那截铅管本就错在 z +0.6，与此无关）。
+  const ptL = 1.9, ptX = 1.35;
+  g.add(solid(new THREE.BoxGeometry(ptL, 0.3, 0.4), mats.brewBeam, ptX, pipeY, zC - 0.6));
+  g.add(solid(new THREE.BoxGeometry(ptL, 0.5, 0.14), mats.brewBeam, ptX, pipeY + 0.2, zC - 0.56));
+  g.add(solid(new THREE.BoxGeometry(ptL, 0.5, 0.14), mats.brewBeam, ptX, pipeY + 0.2, zC - 0.22));
   g.add(solid(new THREE.BoxGeometry(0.36, 0.09, 0.4), mats.lead, stX - 1.2, pipeY, zC + 0.6));
   g.add(solid(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 8), mats.lead, stX - 0.2, pipeY + 0.4, zC + 0.8));
   // 热水桶

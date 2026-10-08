@@ -314,7 +314,7 @@ buildGround: 新增 patch(mats.grass, 20, 20, 66, -68, 0.035) 盖住裸广场
 | `check-zfight`（严格 0.004 m / 0.2 m²） | 露在外面 **0** 处 ✓ |
 | `check-zfight`（默认 0.06 m） | 525 处（动工前 526）✓ |
 | `check-brew` | 7/7 全绿，roof×16 spout×8 runs 8 ✓ |
-| `check-gear` | **381 件**（葡萄酒窖 64、压榨房 61），0 出屋 ✓ |
+| `check-gear` | **381 件**（葡萄酒窖 64、压榨房 61），0 出屋 ✓；门口净空 **8/8**（门洞无物、中线净深 ≥2 m、可达 ≥20%）✓ |
 | `check-npc` | 7 位全通，2581 采样点 ✓ |
 | `check-rain` | 漏点 **0**，15554 滴 0 滴进屋 ✓ |
 | `check-shadow` / `check-poke` | 视锥罩全场景 / 49 机位 0 穿刺 ✓ |
