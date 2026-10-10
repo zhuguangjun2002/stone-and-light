@@ -24,14 +24,14 @@
 | 文件 | 职责 |
 |---|---|
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
-| `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 八建筑 + 服务巷 + 院子排水 `buildBreweryDrain`）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
+| `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 八建筑 + 服务巷 + 院子排水 `buildBreweryDrain` + **招牌 `cellarSign` / 储水塔 `waterTower` / 窑前麦场 `maltYard`**）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
 | `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
 | `src/person.js` | 第三人称替身构造 `buildPerson()`（从 `main.js` 抽出）：长袍/斗篷/兜帽/里料袖、ArmL/ArmR/LegL/LegR 枢轴组、`userData` 存枢轴引用；导出 `poseWalk()` 摆臂（替身/NPC/monk.html 共用） |
 | `src/walkers.js` | 领地里的修士 NPC（`createWalkers()`）：7 位沿回廊/服务巷/集市/墓地动线行走；挂在 `scene` 只做视觉；导出 `WALKERS`/`buildRoute`/`pointAt` 供 `tools/check-npc.mjs` 校验 |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 八个检查器（含 `check-brew.mjs` / **`check-gear.mjs`** / `check-shadow.mjs` / `check-npc.mjs`）+ 取景页（shot.html / shoot.mjs）+ **主站取景 shoot-main.mjs**（含 NPC，`--q=` 可透传任意 URL 参数如 `labels=1`）+ 两个水路演示（drainage.html / **brewery.html**）+ **酿造工序演示（brewprocess.html，两线九站）** + **人物自检（monk.html）** + 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）+ Blender 生成脚本（generate_monk.py → assets/monk.glb）|
+| `tools/` | 八个检查器（含 `check-brew.mjs` / **`check-gear.mjs`** / `check-shadow.mjs` / `check-npc.mjs`）+ **差分探针 `probe.mjs`**（把 check-zfight 的结果去重后写文件，两个状态 diff）+ 取景页（shot.html / shoot.mjs）+ **主站取景 shoot-main.mjs**（含 NPC，`--q=` 可透传任意 URL 参数如 `labels=1`）+ 两个水路演示（drainage.html / **brewery.html**）+ **酿造工序演示（brewprocess.html，两线九站）** + **人物自检（monk.html）** + 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）+ Blender 生成脚本（generate_monk.py → assets/monk.glb）|
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
@@ -46,8 +46,8 @@
 ## 检查器基线（当前全绿）
 
 ```bash
-node test/smoke.mjs                 # 3182 网格 / 337 组 / 36 标注（bbox −69..81 / −122..126），通过
-node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处（默认阈值 0.06 → 525 处）
+node test/smoke.mjs                 # 3278 网格 / 343 组 / 36 标注（bbox −69..81 / −122..126），通过
+node tools/check-zfight.mjs 0.004 0.2   # 严格共面 0 处（默认阈值 0.06 → 526 处）
 node tools/check-rain.mjs           # 0 处漏雨 + 回廊排水通路 7/7，exit 0
 node tools/check-brew.mjs           # 酿酒坊水路 7/7（屋面 40/40 有沟、40/40 有瓦、落水管 8 根），exit 0
 node tools/check-gear.mjs           # 酒坊屋内陈设 381 件 0 件出屋（按 userData.gear 认）+ 门口净空 8/8
@@ -61,12 +61,51 @@ node tools/check-npc.mjs            # 修士 NPC 走线 0 处蹭墙 / 0 处脚�
 酒坊改动把「实心盒子」换成了「四片墙 + 真门洞」，回廊那段（只动南北两翼敞廊墙的**洞口**，
 墙厚、位置、走道净宽都没变）不受影响，所以 NPC 走线基线仍然成立；flicker 合计
 3510 → **3515**（像素级噪声，连跑三次同值；软渲基线 3488 不变），README 与本文件的基线已同步。
-共面数（默认 0.06 m 阈值）当前 **525**、严格 0.004 m 阈值 **0 处**；新增的墙、门、地坪、
+共面数（默认 0.06 m 阈值）当前 **526**、严格 0.004 m 阈值 **0 处**；新增的墙、门、地坪、
 器具与两座新建筑全部避开共面。
 
-## 状态：已收尾（截至 2026-10-08）
+> **526 ≠ 525，说明一下**：默认值比上一轮多 1，但**去重后的网格对集合与动工前逐条相同**
+> （`tools/probe.mjs` 去重后 281 对，diff 为空）。
+> 地面上那些补丁本来就有 145 对被**记两遍**（总面积对不上是重叠区被分块统计），
+> 本轮新加的几何让其中一对 `BoxGeometry@71.15,0.3,-4.1 ↔ BoxGeometry@72.2,0.85,-3.5`
+> （粮仓与烘干窑之间的地面块）从 1 条变成 2 条记录。看数字时按去重后的 281 对读。
 
-### 本轮补：酒坊「一开门就被屋里的家伙挡死」（麦芽楼、煮酒房）
+## 状态：已收尾（截至 2026-10-10）
+
+### 本轮：院里补三件"真实修道院也有"的家伙（招牌 / 储水塔 / 窑前麦场）
+
+三件都对应 `docs/brewery-research.md`「后续可放的空间」与 `docs/wine-research.md`
+实测表末行记着的那几条没做的条目。**坐标与做法都现算，落位先实测空地**：
+
+- **`cellarSign()` — 巷口挑出式酒肆招牌**（酒窖·酒肆门楣正上方）。本轮改动最大的是
+  **朝向**：第一版把匾平行贴在北墙外皮上（法线朝 −x），看着没问题，站在巷子里才发现
+  根本读不出来——服务巷是南北走向的长条，人沿 z 走，平行于墙的牌面只有正好齐平的那
+  一瞬间看得见正脸，前后 20 m 全是侧看。改成中世纪酒馆常见的**挑出招牌**：挑臂伸出
+  门楣，匾垂在挑臂外端、板面与墙垂直（法线朝 ±z），两面都做浮雕。过路人顺路看清。
+- **`waterTower()` — 储水塔**（煮酒房与冷却·发酵之间空档靠东，x 70.4…74 / z 44.4…49.6）。
+  四柱 + 横枋 + 斜撑 + 木桶（两道铅箍）+ 瓦顶 + 东侧塔梯，西侧一只铅嘴，嘴下是
+  **架在石墩上的石槽**（四壁对接不叠、里面一层水）。高 7.5 m。
+  - 它是**储水**不是烘干，所以**不打** `userData.brew`：八座屋面照旧 40/40 有沟有瓦。
+  - 第一版的出水嘴整根悬在桶外（桶壁半径在那个高度是 1.128，嘴心却放在 −1.32），
+    底下那块"引水槽"两头没人接，是根凭空杵着的棍子；改成埋进桶壁 0.03 m 的斜嘴 +
+    石墩石槽。
+- **`maltYard()` — 窑前麦香温床 + 糖化槽**（粮仓与烘干窑之间的空地，x 64…72 / z −11.6…−6.6）。
+  温床：石床 + 四道压边 + 摊开的麦芽 + 两把插在堆里的翻麦耙（耙齿埋进麦芽层 0.15 m，
+  耙头横木刚好露在面上——压得更低反而整根埋进去只剩一根棍子）。
+  糖化槽：木槽 + 四道压边 + 半开的盖 + 槽里的醪 + **白汽（用球，不用方块**——方块的棱角
+  在亮天空上读作"三个白盒子"）+ 斜靠槽沿的搅拌桨 + 坐在下面的砖灶与自发光炭火 +
+  灶口外的柴堆。
+  - 原来那儿摆的是一根"引水槽"：从窑那边斜伸过来、两头都没人接的悬空木板。
+    糖化槽自己坐在砖灶上（热水自己烧），本来也不需要从别处引水，换成灶真正要的东西：柴。
+- **蒸汽材质 `mats.steam`**：透明 + `depthWrite: false` + `userData.noBake`。
+  透明这一条是**必须**的：`rainscan` 的 `blocksRain()` 跳过透明材质，所以一团蒸汽挡在
+  屋里不会被算成"屋顶漏雨"；check-zfight 同样跳过透明材质。
+- 落位用 `tools/probe.mjs`（check-zfight 的差分探针，按"几何类型@中心坐标"去重后写文件，
+  两个状态直接 diff；用法写在文件头）实测空地才摆。**复跑**：冒烟 3278/343/36、严格共面 0、
+  默认档 526（去重后 281 对不变）、水路 7/7、陈设 381 件 / 净空 8/8、NPC 2581 点 0 处、
+  穿刺 49 机位 0 处、flicker **3515 px 不变**、阴影视锥 0 处越界。
+
+### 上一轮：酒坊「一开门就被屋里的家伙挡死」（麦芽楼、煮酒房）
 
 - **实测**：八座里只有**这两座**真进不去（其余六座中线净深 2.20–11.00 m、可达 62–94%）。
   房子并不小（单座 10×15 m、130 m²），毛病在**器具按墙定位**，正好摆到门后：

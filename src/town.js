@@ -102,6 +102,11 @@ function townMaterials() {
     return m;
   };
   const paveTex = pavingTexture();   // 无 DOM 时为 null，退回纯色
+  const steam = new THREE.MeshStandardMaterial({
+    color: '#e8e4dc', roughness: 1, transparent: true, opacity: 0.3,
+    depthWrite: false, emissive: '#8a857c',
+  });
+  steam.userData.noBake = true;
   return {
     wall: M('#c4b9a1'),        // 院内建筑墙
     wallDark: M('#a2957c'),
@@ -158,6 +163,9 @@ function townMaterials() {
     copper: M('#b5743a', 0.35, { emissive: '#4a3018', metalness: 0.75 }),   // 煮酒锅 / 龙头
     oak: M('#6b4c2c', 0.8, { emissive: '#352616' }),         // 橡木大桶
     earthen: M('#a9714a', 0.9, { emissive: '#543825' }),      // 陶杯
+    // 蒸汽：糖化/煮酒那几步冒的白汽。**必须透明** —— rainscan 的 blocksRain() 会跳过透明材质，
+    // 这正是我们要的：一团蒸汽挡在屋里不该被算成"屋顶漏雨"。depthWrite: false 同理（纯视觉）。
+    steam,
     // 屋里的木料与石作同理：木料本身很暗，屋里又没光，不补一点就只剩几道黑线。
     // 这几条只给**屋内**用（brewHouse 的立贴/腰梁、brewery-gear.js 的全部器具），
     // 屋外的木构仍用 timber / wallDark，免得整个院子的木料都在夜里发亮。
@@ -457,6 +465,273 @@ function brewHouse(spec, mats, rnd) {
   return g;
 }
 
+// 巷口酒肆招牌：docs/wine-research.md 实测表末行记着的那条"**巷口的酒肆招牌还没挂**"，这里补上。
+//
+// 挂在酒窖·酒肆（BREW 里的 cellar）朝服务巷那面墙上、**门楣正上方**：北墙外皮在 x = x0，
+// 门洞开在这面墙正中，门楣顶在 dh - 0.03 + 0.17（brewDoor 的过梁）。坐标全部从 cellar 这条
+// spec 现算，改了房子的位置或门宽，这里自动跟过去。
+//
+// **挑出去，不贴墙**——这是这一版改动最大的地方。服务巷是南北走向的长条
+// （LANE：x 57.5…61.5 / z −40…76），修士沿 z 走；牌面若平行于墙（法线朝 −x），
+// 走过的人只有正好与它齐平的那一瞬间才看得正脸，前后 20 m 全是侧看，等于没挂
+// （第一版就是这么写的，巷子里实测确实只看得见一条竖线）。改成中世纪酒馆常见的
+// **挑出招牌**：挑臂伸出门楣，匾挂在挑臂外端、**板面与墙垂直**（法线朝 ±z），
+// 南北两个方向走来的人都正对牌面；两面都做浮雕，谁来都看得见。
+//
+// 高度：挑臂在门楣之上 0.55 m，匾下沿落在 3.05 m，比一个 1.8 m 的人高出 1.25 m。
+// 修士动线在 x 59.0 / 60.3，而匾挂在 x 60.7…61.9、z 69 上下 —— 既够不着人的身体，
+// 也不挡道（挑臂最低处 4.22 m）。check-npc 那 0.9 m 高的身体射线打不着（实测跑过）。
+//
+// 埋与不埋：挑臂内端埋进墙 0.08 m、墙上贴木埋进墙 0.04 m、吊耳两头各埋 0.03 m、
+// 桶身埋进匾面（它是浮雕，本来就只露一半）。凡是两块**同向法线**的面不是拉开 6 cm
+// 以上就是埋进去——齐平/贴面就是两块同向法线 + 投影重叠的面，check-zfight 按 6 cm 阈值
+// 判成共面（同檐沟、灶身、托板那些坑）。
+function cellarSign(mats, spec) {
+  const g = new THREE.Group();
+  const cz = (spec.z0 + spec.z1) / 2;       // 门在墙正中，牌就挂在门楣正上方
+  const dh = Math.min(3.6, spec.h - 1.2);
+  const lintel = dh - 0.03 + 0.17;          // 过梁顶面（brewDoor：中心 dh-0.03，厚 0.34）
+  const armY = lintel + 0.55;               // 挑臂高度
+  const bW = 1.15, bH = 1.05, bT = 0.08;    // 匾面：宽（沿 x）1.15 / 高 1.05 / 厚（沿 z）8 cm
+  const bx = spec.x0 - 0.70, bY = armY - 0.72;
+
+  // 挑臂：一根横木从墙上伸出去（内端埋进墙 0.08 m）+ 一根斜撑从墙上斜下来托住它的外端
+  g.add(solid(new THREE.BoxGeometry(1.40, 0.14, 0.14), mats.timber, spec.x0 - 0.62, armY, cz));
+  const brace = solid(new THREE.BoxGeometry(0.95, 0.1, 0.1), mats.timber, spec.x0 - 0.4, armY - 0.36, cz);
+  brace.rotation.z = -0.62;
+  g.add(brace);
+  // 墙上那块贴木（挑臂的座）：薄板钉在墙上，**埋进墙里** 0.04 m，不是贴在墙面上
+  g.add(solid(new THREE.BoxGeometry(0.1, 0.46, 0.34), mats.wood, spec.x0 + 0.02, armY, cz));
+
+  // 匾面：竖在挑臂外端、板面与墙垂直。上沿在挑臂底之下 0.055 m，靠两道吊耳连着
+  g.add(solid(new THREE.BoxGeometry(bW, bH, bT), mats.wood, bx, bY, cz));
+  for (const sx of [-0.42, 0.42]) {
+    g.add(solid(new THREE.BoxGeometry(0.07, 0.30, 0.07), mats.lead, bx + sx, armY - 0.09, cz));
+  }
+  // 上下压边：两面各两道。厚 0.10、**埋进匾面 0.005 m**，露出的那道边离匾面 0.095 m
+  // （只露 0.06 就在阈值边上晃，宁可厚一点）
+  for (const by of [bY + bH / 2 - 0.045, bY - bH / 2 + 0.045]) {
+    for (const sz of [-1, 1]) {
+      g.add(solid(new THREE.BoxGeometry(bW + 0.06, 0.09, 0.10), mats.timber,
+        bx, by, cz + sz * 0.07));
+    }
+  }
+
+  // 牌面浮雕：一只横躺的小酒桶（横轴沿 x，跟着匾面的方向横过来）。桶是躺着放的，
+  // 两道铁箍要**绕 y 转 90°** 才箍得住 —— 箍默认躺在 XY 平面，直接摆就是一个立着的圈，
+  // 比桶还高一大截（cellar() 里那批横躺橡木大桶踩过同一个坑）。
+  // 桶心离匾面 0.10、半径 0.24 → 桶背陷进匾面 0.14 m，露出来那一半正好读作浮雕。
+  const kegY = bY + 0.09;
+  for (const sz of [-1, 1]) {
+    g.add(solid(new THREE.CylinderGeometry(0.24, 0.24, 0.60, 12), mats.oak,
+      bx, kegY, cz + sz * 0.10).rotateZ(Math.PI / 2));
+    for (const sx of [-0.17, 0.17]) {
+      g.add(solid(new THREE.TorusGeometry(0.245, 0.02, 6, 14), mats.lead,
+        bx + sx, kegY, cz + sz * 0.10).rotateY(Math.PI / 2));
+    }
+  }
+  // 龙头：匾面左下一个铅龙头（内端埋进匾面 0.02 m：齐平就是同向法线 + 投影重叠）
+  // + 出水口上一道铜横把，一眼就知道卖的是酒。只挂在朝北那一面，
+  // 反面不做 —— 两面各伸一个龙头，朝南看就变成两根管子杵在匾上了。
+  g.add(solid(new THREE.CylinderGeometry(0.028, 0.028, 0.22, 8), mats.lead,
+    bx - 0.36, bY - 0.26, cz - 0.13).rotateX(Math.PI / 2));
+  g.add(solid(new THREE.BoxGeometry(0.14, 0.03, 0.03), mats.copper,
+    bx - 0.36, bY - 0.26, cz - 0.24));
+  return g;
+}
+
+// 储水塔：真实修道院的啤酒厂自己带一座塔（docs/brewery-research.md「后续可放的空间」第一条）。
+// 落位在煮酒房与冷却·发酵之间的空档靠东（x 70.4…74 / z 44.4…49.6，tools/probe 实测该块
+// 0.05…5 m 无实体），紧挨冷却间——冷却盘与糖化都要水，塔就立在用水的那几座旁边。
+//
+// 形制：四根石柱撑一只木桶（箍着两道铁圈），顶上盖一个小瓦顶，四面有斜撑。
+// 高度约 7.5 m：够压过冷却间（h 5.6）与它自己的瓦顶，又不至于抢戏架的尖塔
+// （主塔 64.5 m）。塔顶不冒烟也不参与排水——它是**储水**不是烘干，
+// 所以不给 userData.brew 标签，check-brew 仍按八座屋面算（实测 40/40）。
+//
+// **层与层的接缝一律"埋进去"，不许齐平**：横枋埋进柱头 0.10 m、托板埋进横枋 0.08 m、
+// 桶底埋进托板 0.02 m。齐平就是两块同向法线 + 投影重叠的面，check-zfight 按 6 cm 阈值
+// 会判成共面——这一段第一版就把托板顶放在枋顶下 1 cm（正好卡在阈值内），
+// 一跑就多出四处 0.5 m²，往里埋就干净了。
+function waterTower(mats) {
+  const g = new THREE.Group();
+  const cx = 72.2, cz = 47.0;
+  // 四根石柱：柱础 0→0.34，柱身 0.25→3.70（下端埋进柱础 0.09 m）
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const px = cx + sx * 1.05, pz = cz + sz * 1.05;
+    g.add(solid(new THREE.BoxGeometry(0.42, 0.34, 0.42), mats.wallDark, px, 0.17, pz));
+    g.add(solid(new THREE.BoxGeometry(0.26, 3.45, 0.26), mats.wall, px, 1.975, pz));
+  }
+  // 柱头横枋：四根方木围成一圈 3.60→3.80（上端埋进柱头 0.10 m；中间是空的，别做实心板）
+  const bw = 0.2;
+  for (const sz of [-1, 1]) {
+    g.add(solid(new THREE.BoxGeometry(2.36, bw, bw), mats.timber, cx, 3.70, cz + sz * 1.05));
+  }
+  for (const sx of [-1, 1]) {
+    g.add(solid(new THREE.BoxGeometry(bw, bw, 2.36), mats.timber, cx + sx * 1.05, 3.70, cz));
+  }
+  // 斜撑：四面各两根，从柱头斜撑到横枋（读作"撑住的"，不然像个悬空的木箱）
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const br = solid(new THREE.BoxGeometry(0.11, 2.1, 0.11), mats.timber,
+      cx + sx * 0.62, 4.31, cz + sz * 0.62);
+    br.rotation.set(sz * 0.72, 0, -sx * 0.72);
+    g.add(br);
+  }
+  // 托板：铺在横枋上的一层板 3.72→3.94（下端埋进枋里 0.08 m，上端高出枋顶 0.14 m，
+  // 两个面都离枋顶够远 —— 只埋 0.02 的话上表面仍在 6 cm 阈值内）
+  g.add(solid(new THREE.BoxGeometry(2.3, 0.22, 2.3), mats.brewBeam, cx, 3.83, cz));
+  // 塔身：一只大木桶（半径 1.18 / 高 2.5），桶底 3.92 埋进托板 0.02 m
+  const tY = 3.92 + 1.25;
+  g.add(solid(new THREE.CylinderGeometry(1.18, 1.12, 2.5, 16), mats.oak, cx, tY, cz));
+  for (const ty of [tY - 0.82, tY + 0.82]) {
+    g.add(solid(new THREE.TorusGeometry(1.2, 0.045, 6, 20), mats.lead, cx, ty, cz).rotateX(Math.PI / 2));
+  }
+  // 塔顶小瓦顶：盖住桶口，桶里的水才不白晒。檐口 6.30 比桶顶 6.42 低 0.12 m
+  // （盖进去，不是浮在桶上面），脊 7.5 m
+  const roof = new THREE.Mesh(gableRoofGeometry(1.45, 0, 1.2, 2.6), mats.tile);
+  roof.rotation.y = Math.PI / 2;
+  roof.position.set(cx, 6.3, cz);
+  roof.castShadow = roof.userData.buildSkip = true;
+  g.add(roof);
+  // 出水嘴 + 石槽：塔摆在这儿不是为了看，是为了让煮酒与冷却随时有水可取，
+  // 所以嘴要**真接着水**——从桶壁西侧斜伸出来的一截铅嘴，底下架一只石槽接着。
+  // 第一版这块是"一根悬空的木槽"（两头都没有东西接），拍出来是根凭空杵着的棍子，删掉重做。
+  // 嘴的内端埋进桶壁 0.03 m：桶壁半径在该高度约 1.128，嘴心放到 −1.10 才埋得住，
+  // 放 −1.32 就整根悬在桶外（这正是第一版的毛病）。
+  const spout = solid(new THREE.CylinderGeometry(0.06, 0.06, 0.75, 8), mats.lead, cx - 1.28, 3.89, cz);
+  spout.rotation.z = -0.5;                  // 局部 +y 指向东北 → 管身朝西南下坡
+  g.add(spout);
+  // 石槽架在 1.5 m 高的石墩上（墩顶 1.50 → 槽底 → 槽沿 1.88），嘴尖离槽面 1.7 m。
+  // 槽身四壁**对接**不叠：短壁夹在两道长壁之间，端面正好顶在长壁内皮上，
+  // 法线相反不打架；要是让短壁顶到长壁外面，两边外壁就只差 4.5 cm，check-zfight 照报。
+  g.add(solid(new THREE.BoxGeometry(0.90, 1.50, 0.56), mats.wallDark, cx - 1.62, 0.75, cz));
+  g.add(solid(new THREE.BoxGeometry(1.15, 0.08, 0.62), mats.wall, cx - 1.62, 1.54, cz));
+  for (const sz of [-1, 1]) {
+    g.add(solid(new THREE.BoxGeometry(1.15, 0.30, 0.09), mats.wall, cx - 1.62, 1.73, cz + sz * 0.265));
+  }
+  for (const sx of [-1, 1]) {
+    g.add(solid(new THREE.BoxGeometry(0.09, 0.30, 0.44), mats.wall, cx - 1.62 + sx * 0.53, 1.73, cz));
+  }
+  // 槽里那层水：用一片平的面，不用方块 —— 方块埋进四壁里，侧脸离壁只有 1 cm，
+  // 平面上只有一张脸，离槽底 0.16 m，两条都躲开 6 cm 阈值。
+  const troughWater = new THREE.Mesh(new THREE.PlaneGeometry(0.97, 0.44), mats.water);
+  troughWater.rotation.x = -Math.PI / 2;
+  troughWater.position.set(cx - 1.62, 1.66, cz);
+  troughWater.userData.buildSkip = true;
+  g.add(troughWater);
+  // 塔梯：贴着东侧柱挂一排横档（立柱内侧埋进石柱 0.03 m，横档搭在两柱之间）
+  for (let i = 0; i < 7; i++) {
+    g.add(solid(new THREE.BoxGeometry(0.1, 0.07, 0.44), mats.timber, cx + 1.15, 0.55 + i * 0.5, cz));
+  }
+  for (const sz of [-0.22, 0.22]) {
+    g.add(solid(new THREE.BoxGeometry(0.09, 3.6, 0.09), mats.timber, cx + 1.15, 1.9, cz + sz));
+  }
+  return g;
+}
+
+// 烘干窑底下的麦香温床 + 窑前糖化槽：docs/brewery-research.md 同一条里点名的另两件。
+// 落位在粮仓（z -30…-12）与烘干窑（z -6…6）之间那块空地（x 64…72 / z -11.6…-6.6，
+// tools/probe 实测 0.05…5 m 无实体，只有粮仓的吊麦绞盘在 y 8 以上）。
+//
+// 为什么摆在这儿：麦芽从烘干窑出来是**滚烫**的，得先摊开降温（这叫 withening，就是
+// 「麦香温床」的来处），凉了才好送去破碎；糖化槽则要水要热，紧挨窑与粮仓最顺路。
+// 位置也就跟着这条工艺动线定，不是随手放的空地。
+function maltYard(mats) {
+  const g = new THREE.Group();
+  // ---------- 麦香温床：一道 3.8 × 2.6 m 的低矮石床，面上摊一层薄麦芽 ----------
+  const bx = 66.6, bz = -9.4;
+  g.add(solid(new THREE.BoxGeometry(3.8, 0.72, 2.6), mats.brewStone, bx, 0.36, bz));
+  // 床沿压边：四条略高的边，围出一圈浅槽（麦芽摊在槽里，不至于滚到地上）
+  for (const [bw, bd, ox, oz] of [[3.9, 0.12, 0, 1.31], [3.9, 0.12, 0, -1.31],
+    [0.12, 2.74, 1.91, 0], [0.12, 2.74, -1.91, 0]]) {
+    g.add(solid(new THREE.BoxGeometry(bw, 0.16, bd), mats.brewStone, bx + ox, 0.8, bz + oz));
+  }
+  // 摊开的麦芽：薄薄一层，**离床沿内皮留 6 cm**（齐平会与压边内侧判成共面）
+  g.add(solid(new THREE.BoxGeometry(3.56, 0.1, 2.32), mats.malt, bx, 0.77, bz));
+  // 翻麦耙：两把插在麦芽堆里，柄斜靠着床沿
+  for (const rz of [-0.9, 0.9]) {
+    const rake = new THREE.Group();
+    rake.add(solid(new THREE.CylinderGeometry(0.045, 0.045, 1.9, 6), mats.brewWood, 0, 0.95, 0));
+    rake.add(solid(new THREE.BoxGeometry(0.95, 0.07, 0.14), mats.brewWood, 0, 0.06, 0));
+    for (let i = 0; i < 5; i++) {
+      rake.add(solid(new THREE.BoxGeometry(0.06, 0.2, 0.05), mats.lead, -0.38 + i * 0.19, -0.06, 0));
+    }
+    // 耙齿插进麦芽层（齿尖到 0.67，麦芽面 0.82，埋住 0.15 m），耙头横木刚好露在麦芽面上 ——
+    // 耙子本来就是插在堆里的，压到 0.74 反而让耙头整根埋进麦芽、只看得见一根棍子。
+    rake.position.set(bx + rz, 0.82, bz + 1.05);
+    rake.rotation.set(0.18, 0.3, 0.34);
+    g.add(rake);
+  }
+  // ---------- 窑前糖化槽：一只带盖的大木槽，坐在自己的砖灶上 ----------
+  const tx = 70.6, tz = -9.2;
+  g.add(solid(new THREE.BoxGeometry(1.7, 1.5, 2.4), mats.brewWood, tx, 0.75, tz));
+  for (const [bw, bh, bd, ox, oy, oz] of [
+    [1.86, 0.13, 0.13, 0, 1.5, -1.2], [1.86, 0.13, 0.13, 0, 1.5, 1.2],
+    [0.13, 0.13, 2.54, -0.86, 1.5, 0], [0.13, 0.13, 2.54, 0.86, 1.5, 0]]) {
+    g.add(solid(new THREE.BoxGeometry(bw, bh, bd), mats.brewBeam, tx + ox, oy, tz + oz));
+  }
+  // 槽盖：斜搭着的一块板（糖化要保温，但不是盖死的）
+  const lid = solid(new THREE.BoxGeometry(1.8, 0.09, 1.3), mats.brewWood, tx, 1.63, tz - 0.32);
+  lid.rotation.z = 0.24;
+  g.add(lid);
+  // 槽里的麦芽醪：盖没盖到的那一半露出来，醪面比槽口（槽身顶 1.50）低 7 cm
+  g.add(solid(new THREE.BoxGeometry(1.5, 0.06, 0.86), mats.malt, tx, 1.4, tz + 0.58));
+  // 蒸汽：几团半透明的白汽从盖缝里飘出来（糖化这步是热锅里冒汽的）。
+  // **用球不用方块**：方块的棱角在亮天空上读作"几个白盒子"，球才读作汽；
+  // 材质透明 + depthWrite:false，所以既不进 check-zfight（它跳过透明材质），
+  // 也不会被 rainscan 的 blocksRain() 当成"屋顶漏雨"（那一项也跳过透明材质）。
+  for (const [sx, sy, sz, ss] of [[-0.25, 1.86, 0.10, 0.30], [0.15, 2.05, 0.34, 0.24],
+    [-0.05, 2.24, 0.04, 0.19], [0.30, 1.94, -0.24, 0.15]]) {
+    const st = new THREE.Mesh(new THREE.SphereGeometry(ss, 7, 5), mats.steam);
+    st.position.set(tx + sx, sy, tz + sz);
+    st.userData.buildSkip = true;
+    g.add(st);
+  }
+  // 搅拌桨：搅完**斜靠在槽边**——柄头顶住西侧那道压边，桨叶搁在地上。
+  // 别再让桨叶泡在醪里：第一版那样摆，柄从槽口斜着伸出来，两头都不挨着什么，看着像
+  // 悬在槽上；想让柄真搭到沿上，槽口离醪面只有 0.1 m，柄就得几乎平躺，那更不是桨。
+  // 位置照着"靠着"算：桨尖落在 (tx−1.45, 0.02)，柄顶走到压边外皮 (x0−0.86−0.075) 的
+  // 转角上，柄长 1.35、倾角 0.335 rad，末梢与压边交叠 6 cm —— 读作"顶着"，不是穿过去。
+  const paddle = new THREE.Group();
+  paddle.add(solid(new THREE.CylinderGeometry(0.045, 0.045, 1.35, 6), mats.brewWood, 0, 0.675, 0));
+  paddle.add(solid(new THREE.BoxGeometry(0.22, 0.46, 0.06), mats.brewWood, 0, -0.23, 0));
+  paddle.position.set(tx - 1.30, 0.47, tz + 0.25);
+  paddle.rotation.set(0, 0.35, -0.335);
+  g.add(paddle);
+  // 柴堆：灶口朝南（+z），柴就码在灶口外侧一步远的地方。
+  // 原来这儿摆的是一根"引水槽"——从窑那边斜伸过来、两头都没人接的悬空木板，
+  // 拍出来是根凭空杵着的棍子。糖化槽自己就坐在砖灶上（热水自己烧），
+  // 本来也不需要从别处引水，那根东西没有道理留着，换成灶真正要的东西：柴。
+  // 柴**横躺着码在 z 上**：要横过来就得绕 **z** 转 90°——圆柱的轴本来就是 y，
+  // 绕 y 转多少它都还是竖的（这个坑踩过一次：拍出来四根像小界桩一样杵在灶口）。
+  // 最北那根离灶身还有 9 cm；要是顺着 z 摆，1.2 m 长的一根会插进灶身里。
+  for (const [ly, lz] of [[0.11, -6.95], [0.11, -7.25], [0.11, -7.55], [0.32, -7.18]]) {
+    const log = solid(new THREE.CylinderGeometry(0.11, 0.11, 1.2, 8), mats.trunk,
+      tx + 0.1, ly, lz);
+    log.rotation.z = Math.PI / 2;
+    g.add(log);
+  }
+  // 槽脚下的砖灶：糖化槽要坐在火上（这是「窑前」那台，不是屋里 brewhouse 那两只）。
+  // 灶身要比槽身**每边宽出 12 cm 以上**，而且长宽**都取不同的数**：只宽 5 cm 时灶侧皮与
+  // 槽侧皮相距 0.05 m，正好卡在 check-zfight 的 6 cm 阈值里，一跑就多出两处 0.6 m²；
+  // 改成跟槽一样深 2.6 之后两侧又**齐平**（间距 0.000），照样报——所以深度取 2.9。
+  g.add(solid(new THREE.BoxGeometry(2.0, 0.34, 2.9), mats.brewStone, tx, 0.17, tz));
+  // 灶口：朝南（+z）开一个拱形火口 + 里面一撮炭火（自发光，白天也看得见）。
+  // 挡板**探出炉口** 0.08 m，不贴在口上：贴着时两者相距 2 cm，check-zfight 判成共面
+  // （brewhouse 的砖灶当初踩过同一个坑）。自发光材质 inline 建，不复用器具里那只
+  // —— ember() 是 brewery-gear.js 的私有函数，且那批火都在屋里。
+  g.add(solid(new THREE.BoxGeometry(0.62, 0.62, 0.1), mats.wallDark, tx, 0.2, tz + 1.3));
+  const fire = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06),
+    new THREE.MeshStandardMaterial({
+      color: '#c2410c', emissive: '#ff7a1a', emissiveIntensity: 1.6, roughness: 1,
+    }));
+  fire.material.userData.noBake = true;
+  fire.position.set(tx, 0.18, tz + 1.22);
+  fire.userData.buildSkip = true;
+  g.add(fire);
+  return g;
+}
+
 // 酿酒坊大院：八座生产建筑 + 院坝水井 + 酒桶 + 排水
 function buildBrewery(mats) {
   const g = new THREE.Group();
@@ -471,6 +746,13 @@ function buildBrewery(mats) {
   }
   // 院坝水井：煮酒与冷却都要水
   g.add(yardWell(mats, WELL.x, WELL.z));
+  // 巷口酒肆招牌：挂在 cellar 朝巷那面墙上，门楣正上方（docs/wine-research.md 实测表末行）
+  const cellarSpec = BREW.find((b) => b.key === 'cellar');
+  if (cellarSpec) g.add(cellarSign(mats, cellarSpec));
+  // 院里的两件"真实修道院也有"的家伙（docs/brewery-research.md「后续可放的空间」）：
+  // 储水塔 + 窑前麦香温床与糖化槽。落位见各自函数头的注释（都是 tools/probe 实测过的空地）。
+  g.add(waterTower(mats));
+  g.add(maltYard(mats));
   // 酒桶堆在煮酒房与冷却发酵间之间的空档
   const barrelG = new THREE.CylinderGeometry(0.5, 0.54, 1.3, 12);
   for (const [bx, bz] of [[64.5, 45.4], [64.5, 47.4], [66.2, 46.4], [68.0, 44.6]]) {
