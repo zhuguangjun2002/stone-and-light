@@ -1,0 +1,692 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>酿造小故事 · 从葡萄到大院里的那一口</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1218; font: 15px/1.7 system-ui, sans-serif; color: #eef3f8; }
+  #ui { position: fixed; left: 14px; top: 14px; width: 238px; padding: 13px 15px; border-radius: 12px;
+        background: rgba(14,19,26,.86); backdrop-filter: blur(7px); box-shadow: 0 8px 30px #0007; }
+  #ui h1 { font-size: 16px; margin: 0 0 8px; }
+  #ui .sub { font-size: 11.5px; color: #8fa3b6; margin: -4px 0 8px; }
+  #ui .acts { font-size: 12.5px; max-height: 50vh; overflow: auto; }
+  #ui .acts div { padding: 3px 6px; border-radius: 6px; cursor: pointer; color: #9fb0c0; }
+  #ui .acts div:hover { background: #ffffff14; color: #fff; }
+  #ui .acts div.on { background: #2f6ea8; color: #fff; }
+  #ui .row { display: flex; gap: 6px; margin-top: 10px; }
+  #ui button { flex: 1; padding: 6px; border: 0; border-radius: 7px; background: #2f6ea8; color: #fff;
+               font-size: 13px; cursor: pointer; }
+  #ui button.off { background: #3a4753; color: #9fb0c0; }
+  #ui .chk { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 12px; color: #cbd8e4; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 3px; background: #ffffff14; }
+  #bar i { display: block; height: 100%; background: #7fd0ff; width: 0; }
+  #cap { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); max-width: 66vw;
+         padding: 12px 20px; border-radius: 12px; background: rgba(12,17,24,.9);
+         box-shadow: 0 8px 28px #0008; display: none; }
+  #cap b { display: block; font-size: 17px; margin-bottom: 5px; color: #ffd070; }
+  #cap span { font-size: 14.5px; color: #e6eef7; }
+  #act { position: fixed; left: 50%; top: 44px; transform: translateX(-50%); font-size: 13px; letter-spacing: .28em;
+         color: #7fd0ff; text-shadow: 0 2px 10px #000a; display: none; }
+  #hint { position: fixed; right: 14px; bottom: 16px; font-size: 12px; color: #9fb0c0;
+          background: rgba(14,19,26,.7); padding: 7px 10px; border-radius: 8px; }
+</style>
+
+<div id="ui">
+  <h1>酿造小故事</h1>
+  <div class="sub">十一条幕 · 两条线在一张桌上合流</div>
+  <div class="acts" id="acts"></div>
+  <div class="row">
+    <button id="play">⏸ 暂停</button>
+    <button id="replay">↺ 重播</button>
+  </div>
+  <div class="chk"><input id="xray" type="checkbox"><label for="xray" style="margin:0">透视墙体（看结构用）</label></div>
+</div>
+<div id="act"></div>
+<div id="cap"><b></b><span></span></div>
+<div id="bar"><i></i></div>
+<div id="hint">点左侧任一幕跳过去 &nbsp;|&nbsp; 空格 暂停 · ← → 切幕</div>
+
+<script type="importmap">
+  { "imports": { "three": "../lib/three.module.js" } }
+</script>
+<script type="module">
+// 酿造小故事：十一条幕，镜头从北头的葡萄园一路走到南头的酒肆，把两条线
+// （啤酒 / 葡萄酒）在酒肆那张桌子上合成一个故事。
+//
+// 取材原则：**不造场景里已经有的东西**。葡萄架、采收筐、压榨机、冷却浅盘、
+// 橡木桶、陶瓮、巷口招牌都已经建在 src/ 里了（plantations.js / brewery-gear.js /
+// town.js 的 cellarSign），再造一份只会穿帮、也会和真几何打架。所以这页只加三类东西：
+//   1. 走位的修士 —— buildPerson() + poseWalk()，与领地 NPC、monk.html 同一套
+//   2. 修士手里拎的（筐 / 麦袋 / 酒桶）—— 挂在人身上，不占地面
+//   3. 粒子（葡萄 / 蒸汽 / 泡沫 / 酒液）—— 纯视觉效果
+// 屋里的工序靠**镜头 + 高亮真器具 + 粒子**来讲，不摆假的家具。
+// 每一幕的台词、机位、动线都取自 brewStory()（src/town.js，与场景同源）。
+import * as THREE from '../lib/three.module.js';
+import { buildCathedral } from '../src/cathedral.js';
+import { brewStory, brewInfo } from '../src/town.js';
+import { buildPerson, poseWalk } from '../src/person.js';
+import { buildRoute, pointAt } from '../src/walkers.js';
+import { P } from '../src/params.js';
+
+const STORY = brewStory();
+const B = brewInfo();
+const S = new Map(B.process.map((s) => [s.key, s]));
+const bld = new Map(B.buildings.map((b) => [b.key, b]));
+
+// ---------- 场景（与演示页同一套光照 / 地面 / 阴影配置）----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+// 傍晚的天色：故事从秋收讲到卖酒，时间是往傍晚走的，所以底色压成暖灰蓝。
+// **不要照抄演示页那套灰底阴天**——那是"看工序说明"的照明，不是"讲故事"的。
+// 太阳压低到西南侧（+x 是南），屋里的工序那几幕靠半球光补，否则屋里一片黑。
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#7d8ea0');
+scene.fog = new THREE.FogExp2('#7d8ea0', 0.0016);
+scene.add(new THREE.HemisphereLight('#cfe0f5', '#6b6450', 1.25));
+const sun = new THREE.DirectionalLight('#fff0d2', 2.1);
+sun.position.set(150, 78, 60);
+sun.target.position.set(66, 0, 12);
+sun.castShadow = true;
+{
+  const Sh = P.shadow;                      // 阴影视锥与主站同一份（params.js 的 P.shadow）
+  sun.shadow.mapSize.set(Sh.map, Sh.map);
+  sun.shadow.camera.left = -Sh.H; sun.shadow.camera.right = Sh.H;
+  sun.shadow.camera.top = Sh.top; sun.shadow.camera.bottom = Sh.bottom;
+  sun.shadow.camera.near = Sh.near; sun.shadow.camera.far = Sh.far;
+  sun.shadow.bias = Sh.bias;
+}
+scene.add(sun, sun.target);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(600, 48),
+  new THREE.MeshStandardMaterial({ color: '#77805f' }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.25; ground.receiveShadow = true;
+const plaza = new THREE.Mesh(new THREE.PlaneGeometry(148, 210),
+  new THREE.MeshStandardMaterial({ color: '#8b8578' }));
+plaza.rotation.x = -Math.PI / 2; plaza.position.set(6, -0.08, 10); plaza.receiveShadow = true;
+scene.add(ground, plaza);
+
+const root = buildCathedral().root;
+scene.add(root);
+scene.updateMatrixWorld(true);
+
+// ---------- 透视墙体 ----------
+const ghost = [];
+const collect = (o) => o.traverse((m) => {
+  if (!m.isMesh) return;
+  for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) {
+    if (mat && !mat.userData.glazing && !ghost.includes(mat)) ghost.push(mat);
+  }
+});
+collect(root); collect(ground); collect(plaza);
+let xray = false;
+// 用户在面板上手动拨过开关之后，就不再自动切透视（autoXrayLocked）。
+function applyXray() {
+  for (const m of ghost) {
+    if (m.userData._orig === undefined) m.userData._orig = { t: m.transparent, o: m.opacity, d: m.depthWrite };
+    const o = m.userData._orig;
+    m.transparent = xray ? true : o.t;
+    m.opacity = xray ? 0.2 : o.o;
+    m.depthWrite = xray ? false : o.d;
+    m.needsUpdate = true;
+  }
+}
+applyXray();
+
+// ---------- 每座房子的器具（按 userData.gear + 父级 brewKey 分组，与演示页同一份）----------
+const gearOf = new Map();
+root.traverse((o) => {
+  if (!o.isMesh || !o.userData.gear) return;
+  let p = o.parent;
+  while (p && !p.userData.brewKey) p = p.parent;
+  if (!p) return;
+  const k = p.userData.brewKey;
+  if (!gearOf.has(k)) gearOf.set(k, []);
+  gearOf.get(k).push(o);
+});
+let hlKey = null;
+function setHL(key) {
+  if (key === hlKey) return;
+  if (hlKey) {
+    for (const m of gearOf.get(hlKey) || []) {
+      if (m.userData._saved) { m.material = m.userData._saved; m.userData._saved = null; }
+    }
+  }
+  hlKey = key;
+  for (const m of gearOf.get(hlKey) || []) {
+    if (!m.userData._hl) {
+      // 高亮是"提色 + 提亮一点"，**不是"打灯"**。
+      // 演示页那版把 emissiveIntensity 顶到 1.1，在它自己的灰底阴天里看着是"亮了一下"；
+      // 故事页是傍晚暖光，同样的值会把器具烧成一片惨白，铜锅和麦芽堆全糊成一团（实测）。
+      // 现在只做两件事：颜色往暖白偏 22%、自发光保留原值再抬一点点。
+      const c = m.material.clone();
+      if (c.color) c.color.lerp(new THREE.Color('#fff0cf'), 0.22);
+      if (c.emissive && c.emissiveIntensity !== undefined) {
+        c.emissiveIntensity = Math.max(c.emissiveIntensity, 0.35);
+      }
+      m.userData._hl = c;
+    }
+    m.userData._saved = m.material;
+    m.material = m.userData._hl;
+  }
+}
+// fx → 该点亮哪座房子的真器具（屋里没有假家具，全靠这个）
+const FX_STAGE = {
+  mash: 'brewhouse', brew: 'brewhouse', press: 'press', foam: 'cooling',
+  age: 'winecellar', cask: 'cellar',
+};
+// 透视一律关着。
+//
+// 演示页（brewprocess.html）要开 xray，是因为它的机位在**屋外**、要隔着墙看屋里的器具。
+// 故事页不是：屋里那五幕的机位**就在屋里**，镜头与器具之间没有墙；
+// 而开着 xray 反而把镜头背后那几面墙也变透明，于是整个画面被外面的院子冲淡成一片灰蓝
+// （实测灌桶那一幕：桶、台子都在，但满屏都是透过来的墙与天，一眼分不出远近）。
+// 所以这里默认关，只留面板上的开关给想看结构时手动开。
+
+// ---------- 屋内机位的避让 ----------
+// （机位本身由 brewStory() 给，这页不再另算一遍；改机位去改 town.js 的 inhouse()。）
+
+// ---------- 小道具的材质 ----------
+const M = (c, r = 0.9, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: r, ...extra });
+const mBasket = M('#7d6a48', 0.9);
+const mGrape = M('#5e3160', 0.42);
+const mSack = M('#9c8b66', 1);
+const mOak = M('#6b4c2c', 0.8);
+const mWood = M('#5a4128', 0.85);
+const mIron = M('#61666d', 0.5, { metalness: 0.35 });
+const mWort = M('#b3712a', 0.55, { emissive: '#593815' });
+const mWine = M('#6d2440', 0.45, { emissive: '#2e0c18' });
+const mFoam = M('#e8ddc4', 1);
+
+// 道具组挂在 scene 上（不进 root）：会动的东西不进碰撞网格、不进烘焙、不进检查器
+// ——与 src/walkers.js 里 NPC 挂 scene 的理由一样。
+const props = new THREE.Group();
+scene.add(props);
+function part(geo, mat, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = m.receiveShadow = true;
+  props.add(m);
+  return m;
+}
+
+// ---------- 粒子 ----------
+function moteTex(rgb) {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.35, rgb.replace('A', '0.95'));
+  gr.addColorStop(1, rgb.replace('A', '0'));
+  g.fillStyle = gr; g.beginPath(); g.ellipse(32, 32, 30, 30, 0, 0, 7); g.fill();
+  return new THREE.CanvasTexture(c);
+}
+// 一簇小点。at = 出生点（中心），spread = 三轴散布，dir = 漂移方向（+1 向上 / -1 落下），
+// sway = 横向摆幅，size = 大小，n = 个数。
+function motes(n, rgb, size, at, spread, dir = 1, sway = 0, life = 2.6) {
+  const out = [];
+  const tex = moteTex(rgb);
+  for (let i = 0; i < n; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, opacity: 0,
+    }));
+    const p0 = new THREE.Vector3(
+      at[0] + (Math.random() - 0.5) * spread[0],
+      at[1] + (Math.random() - 0.5) * spread[1],
+      at[2] + (Math.random() - 0.5) * spread[2]);
+    sp.position.copy(p0);
+    sp.scale.set(size, size, 1);
+    sp.userData = {
+      p0, t: Math.random(), spd: 0.7 + Math.random() * 0.6, dir, sway,
+      rise: 0.5 + Math.random() * 1.6, life, size,
+    };
+    props.add(sp);
+    out.push(sp);
+  }
+  return out;
+}
+function stepMotes(arr, dt) {
+  for (const o of arr) {
+    const d = o.userData;
+    d.t += dt * d.spd / d.life;
+    if (d.t >= 1) { d.t -= 1; }
+    const e = d.t;
+    o.position.set(
+      d.p0.x + Math.sin(e * 9 + d.spd * 5) * d.sway,
+      d.p0.y + e * d.rise * d.dir,
+      d.p0.z + Math.cos(e * 7 + d.spd * 4) * d.sway);
+    // 透明度上限 0.62：颗粒自己是 0.9，叠起来就成白墙了
+    o.material.opacity = Math.sin(e * Math.PI) * 0.62;
+    // **乘** d.size，不要 setScalar —— setScalar 把传进来的 size 冲掉了，
+    // 于是 0.13 m 的尘土粒子全都变成 1 m，出图是一团白雾罩住整辆车。
+    const k = d.size * (0.8 + Math.sin(e * Math.PI) * 0.4);
+    o.scale.set(k, k, 1);
+  }
+}
+function dropMotes(arr) {
+  for (const o of arr) { props.remove(o); o.material.dispose(); }
+  arr.length = 0;
+}
+
+// ---------- 修士 ----------
+// buildPerson 造出来的模型默认 visible=false，这里统一打开。
+function makeMonk(pal) {
+  const p = buildPerson(pal);
+  p.visible = false;
+  props.add(p);
+  return p;
+}
+const PAL = {
+  pick: { robe: 0x5a4a38, robeDark: 0x433528, belt: 0xc9b294 },
+  haul: { robe: 0x6b5a44, robeDark: 0x54462f, belt: 0xd2c39c },
+};
+const monkPick = makeMonk(PAL.pick);       // 采收 / 推车 / 装箱
+const monkHaul = makeMonk(PAL.haul);       // 扛桶
+
+// 手里拎的东西：葡萄筐 / 麦袋 / 酒桶。挂在身前，不落地。
+function makeBasket() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.23, 0.32, 12), mBasket);
+  body.castShadow = true; g.add(body);
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * 6.28, r = Math.random() * 0.22;
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mGrape);
+    b.position.set(Math.cos(a) * r, 0.16 + Math.random() * 0.06, Math.sin(a) * r);
+    g.add(b);
+  }
+  return g;
+}
+function makeSack() {
+  const g = new THREE.Group();
+  const s = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 9), mSack);
+  s.scale.set(1.15, 0.85, 1); s.castShadow = true; g.add(s);
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 6, 10), mSack);
+  tie.rotation.x = Math.PI / 2; tie.position.y = 0.24; g.add(tie);
+  return g;
+}
+function makeCask(fillMat) {
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.27, 0.8, 14), mOak);
+  b.castShadow = true; g.add(b);
+  for (const y of [0.22, -0.22]) {
+    const h = new THREE.Mesh(new THREE.TorusGeometry(0.305, 0.028, 6, 16), mIron);
+    h.rotation.x = Math.PI / 2; h.position.y = y; g.add(h);
+  }
+  const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.02, 14), fillMat);
+  fill.position.y = -0.34; fill.scale.y = 0.02; g.add(fill);
+  g.userData.fill = fill;
+  return g;
+}
+function setCarry(monk, obj) {
+  if (monk.userData.carry) monk.remove(monk.userData.carry);
+  monk.userData.carry = obj || null;
+  if (obj) { obj.position.set(0, 0.82, -0.36); monk.add(obj); }
+}
+function place(monk, x, z, heading, phase, walk) {
+  monk.visible = true;
+  poseWalk(monk, phase, 0.55, walk);
+  monk.position.set(x, 0, z);
+  monk.rotation.y = heading;
+}
+
+// ---------- 粮车（'grain' 那一幕：场景里没有现成的车，WAGON_Z 那道门就是给它留的）----------
+//
+// **朝向**：车头朝**局部 +x**，于是 cart.rotation.y = heading 就直接对齐了
+//（pointAt 给的 heading 就是"面向 -z 为 0"那套，所以要 + π/2，见 stepStory）。
+// 车轴横在 z 上、车轮挂在轴的两端、辕杆拖在车尾（局部 -x）——
+// 辕杆朝前是推着走还是拉着走都说不通，第一版就搞反过，出图是一辆横着的车。
+const cart = new THREE.Group();
+{
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.22, 1.05), mWood);
+  bed.position.y = 0.62; bed.castShadow = true; cart.add(bed);
+  for (const sz of [0.5, -0.5]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.36, 0.06), mWood);
+    side.position.set(0, 0.9, sz); side.castShadow = true; cart.add(side);
+  }
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.36, 1.05), mWood);
+  front.position.set(0.85, 0.9, 0); cart.add(front);
+  // 车轴 + 两个轮
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.15, 8), mIron);
+  axle.rotation.x = Math.PI / 2; axle.position.set(-0.15, 0.4, 0); cart.add(axle);
+  for (const sz of [0.6, -0.6]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.13, 14), mWood);
+    w.rotation.x = Math.PI / 2; w.position.set(-0.15, 0.4, sz); w.castShadow = true; cart.add(w);
+    for (let i = 0; i < 6; i++) {           // 辐条
+      const sp = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.05, 0.05), mWood);
+      sp.rotation.z = (i / 6) * 3.14159;
+      sp.position.set(-0.15, 0.4, sz); cart.add(sp);
+    }
+  }
+  // 辕杆：拖在车尾，人握着的那一段
+  for (const sz of [0.3, -0.3]) {
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.07, 0.07), mWood);
+    shaft.position.set(-1.55, 0.5, sz); cart.add(shaft);
+  }
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.72), mWood);
+  bar.position.set(-2.3, 0.5, 0); cart.add(bar);
+  // 车上的麦袋
+  const load = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 9), mSack);
+  load.scale.set(1.35, 0.78, 1.1); load.position.set(0.15, 0.86, 0); load.castShadow = true;
+  cart.add(load);
+}
+cart.visible = false;
+props.add(cart);
+
+// ---------- 招牌的灯（纯效果：巷口那块匾是 town.js 的 cellarSign() 建的，这里只给它一点光）----------
+const cellarSignBox = (() => {
+  // 招牌挂在 cellar 北墙外皮、门楣正上方：x = x0−0.7，高 3.05…4.25（cellarSign 的算法）
+  const c = bld.get('cellar');
+  return new THREE.Vector3(c.x0 - 0.7, 3.7, (c.z0 + c.z1) / 2);
+})();
+const signGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: moteTex('rgba(255,205,120,A)'), transparent: true, depthTest: false, opacity: 0,
+  blending: THREE.AdditiveBlending,
+}));
+signGlow.scale.set(4.2, 3.4, 1);
+signGlow.position.copy(cellarSignBox);
+signGlow.visible = false;
+props.add(signGlow);
+const signLamp = part(new THREE.SphereGeometry(0.1, 10, 8),
+  new THREE.MeshStandardMaterial({ color: '#ffd070', emissive: '#ffb040', emissiveIntensity: 2 }),
+  cellarSignBox.x - 0.3, cellarSignBox.y + 0.6, cellarSignBox.z);
+signLamp.visible = false;
+
+// ---------- 相机：从当前机位推到这一幕的机位 ----------
+// **不能只朝目标点插值**：一段 10 m 的推轨里，如果只用 lerp(pos, goalPos)，
+// 起点与终点差得越远、镜头偏得越多——最离谱的一次直接插到粮仓的墙里（实测：
+// 出图是一整片墙面 + 两个窗）。所以插值的是**机位与目标两个点各自的一条直线**，
+// 且每一步都重新 lookAt 目标。改这一段之前先跑 check-shot.mjs 看视线。
+const camPos = new THREE.Vector3();
+const camTgt = new THREE.Vector3();
+const _p = new THREE.Vector3(), _q = new THREE.Vector3();
+// 开场时先把两处都摆到序幕的机位上（story.html 里 goto(0) 之前调用）
+function snapCam(beat) {
+  camPos.set(...beat.cam.pos);
+  camTgt.set(...beat.cam.tgt);
+  camera.position.copy(camPos);
+  camera.lookAt(camTgt);
+}
+
+// ---------- 每一幕的道具（按 fx 建；用完就拆）----------
+let fxMotes = [], fxCart = false, fxSign = false;
+function clearFx() {
+  dropMotes(fxMotes);
+  cart.visible = false;
+  signGlow.visible = false; signGlow.material.opacity = 0;
+  signLamp.visible = false;
+  monkPick.visible = false; monkHaul.visible = false;
+  setCarry(monkPick, null); setCarry(monkHaul, null);
+  fxCart = false; fxSign = false;
+}
+const bOf = (k) => bld.get(k);
+const ctr = (k) => [(bOf(k).x0 + bOf(k).x1) / 2, 0, (bOf(k).z0 + bOf(k).z1) / 2];
+
+function buildFx(beat) {
+  clearFx();
+  const fx = beat.fx;
+  // 修士手里的东西（carry 由 brewStory 给）
+  if (beat.carry === 'basket') setCarry(monkPick, makeBasket());
+  if (beat.carry === 'cask') setCarry(monkHaul, makeCask(mWine));
+
+  switch (fx) {
+    case 'grapes': {
+      // 葡萄从下铁丝底下一颗颗落进筐里（场景里的葡萄架与采收筐是真的，不另搭）
+      const v = S.get('vineyard');
+      fxMotes = motes(26, 'rgba(150,80,170,A)', 0.15,
+        [v.cx - 1.6, 0.92, v.cz - 0.5], [3.6, 0.25, 1.4], -1, 0.16, 1.5);
+      break;
+    }
+    case 'cart': {
+      fxCart = true;
+      cart.visible = true;
+      // 扬起的尘土：只在车轮边一缕（位置每帧跟着车走，见 stepStory）
+      fxMotes = motes(10, 'rgba(198,180,146,A)', 0.13,
+        [bOf('granary').x0 + 3, 0.14, bOf('granary').z0 - 2], [1.3, 0.1, 1.3], 1, 0.35, 2.2);
+      break;
+    }
+    case 'brew': {
+      // 蒸汽从屋里偏东那口铜锅上升起（铜锅在 x 70.5…73.3 / z 35.8…38.6，见 brewery-gear.js）。
+      // 粒子要**小、淡、稀**：上一版 22 粒 × 0.4 m 在锅口 1.7 m 处，
+      // 一片白正好糊满锅身，铜锅、锅沿、提梁全被吞掉——远看只剩一团雾。
+      // 现在 12 粒、0.18 m，透明度上限也压低（stepMotes 里 ×0.9）。
+      fxMotes = motes(12, 'rgba(228,236,240,A)', 0.18,
+        [71.6, 1.9, 37.2], [1.5, 0.2, 1.4], 1, 0.45, 4.2);
+      break;
+    }
+    case 'press': {
+      // 压出来的汁顺着台基那圈槽往下走
+      const c = ctr('press');
+      fxMotes = motes(20, 'rgba(150,70,95,A)', 0.13,
+        [c[0], 1.35, c[2]], [1.8, 0.2, 1.4], -1, 0.3, 1.4);
+      break;
+    }
+    case 'foam': {
+      // 发酵的泡沫从**冷却浅盘**上升起（盘在 x0+0.7…x0+2.6 / z −1.75…−0.25 一带，
+      // 见 brewery-gear.js 的 cooling()；麦汁是 b3712a 那个颜色）。
+      // **贴着盘面、粒小**：上一版 26 粒 × 0.22 m 撒在屋子中段上方近 1 m 处，
+      // 整片白雾把屋子糊掉，只剩两只桶的轮廓。这里 14 粒、0.15 m，就在盘口那一层。
+      const c = bOf('cooling');
+      fxMotes = motes(14, 'rgba(243,236,216,A)', 0.15,
+        [c.x0 + 1.7, 1.05, (c.z0 + c.z1) / 2 - 1.0], [1.2, 0.12, 1.3], 1, 0.4, 2.2);
+      break;
+    }
+    case 'age': {
+      // 窖里安静：极慢的浮尘（"几个月过去"靠字幕，这一簇只负责让空气有厚度）
+      const c = ctr('winecellar');
+      fxMotes = motes(14, 'rgba(232,222,192,A)', 0.1,
+        [c[0], 1.2, c[2]], [4.0, 1.2, 3.0], 1, 0.25, 5.0);
+      break;
+    }
+    case 'cask': {
+      // 灌桶：酒液从龙头注进台上的空桶。**位置对着灌装台**（cellar() 里
+      // 灌装台在 -w/2+T+1.6、z = cz+3.4，台上的空桶再往北 0.8），
+      // 别丢在房屋中心——那儿是横躺大桶那一排，酒液会浇在桶盖上。
+      const c = bOf('cellar');
+      const fillX = c.x0 + 2.4, fillZ = (c.z0 + c.z1) / 2 + 2.6;
+      fxMotes = motes(18, 'rgba(206,142,58,A)', 0.1,
+        [fillX, 1.72, fillZ], [0.5, 0.12, 0.5], -1, 0.1, 1.1);
+      break;
+    }
+    case 'sign': {
+      fxSign = true;
+      break;
+    }
+    case 'haul': break;
+  }
+}
+
+// ---------- 摄影机 ----------
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.2, 3000);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- 播放 ----------
+const $ = (id) => document.getElementById(id);
+const cap = $('cap'), capB = cap.querySelector('b'), capS = cap.querySelector('span');
+const actEl = $('act'), bar = $('bar').firstElementChild;
+const TOTAL = STORY.reduce((a, s) => a + s.dur, 0);
+let idx = 0, t = 0, playing = true, lastStage;
+const actRows = new Map();
+for (const [i, s] of STORY.entries()) {
+  const d = document.createElement('div');
+  d.textContent = `${s.act}｜${s.title}`;
+  d.dataset.i = i;
+  d.onclick = () => { goto(i); playing = true; syncPlayBtn(); };
+  $('acts').appendChild(d);
+  actRows.set(i, d);
+}
+function syncPlayBtn() {
+  $('play').textContent = playing ? '⏸ 暂停' : '▶ 播放';
+  $('play').classList.toggle('off', !playing);
+}
+function goto(i) {
+  i = Math.max(0, Math.min(STORY.length - 1, i));
+  if (i === idx && t > 0) { t = 0; buildFx(STORY[i]); }
+  idx = i; t = 0;
+  const s = STORY[i];
+  buildFx(s);
+  const stage = FX_STAGE[s.fx];
+  if (stage !== lastStage) { setHL(stage || null); lastStage = stage; }
+  // 透视不自动切了（见上面 FX_INSIDE 那段注释）：屋里五幕的机位在屋里，不需要透视。
+  capB.textContent = s.title;
+  capS.textContent = s.text;
+  cap.style.display = 'block';
+  actEl.textContent = s.act;
+  actEl.style.display = 'block';
+  for (const [k, el] of actRows) el.classList.toggle('on', k === i);
+  // 从上一幕的位置开始缓入这一幕的机位（片子里就是一次连续的推轨）
+  if (STORY[i].route) { STORY[i].s = 0; }
+}
+
+// ---------- 动线：与领地 NPC 同一套圆角 + 弧长参数化 ----------
+// walk 的折线在 brewStory() 里给（storyWalk），这里用 buildRoute/pointAt 展开，
+// 与 tools/check-story.mjs 校验的是同一条线。
+for (const s of STORY) {
+  if (s.walk) s.route = buildRoute(s.walk.poly, false);
+}
+
+// ---------- 每帧推进 ----------
+const cartOffset = 1.35;          // 车在修士身前
+
+function stepStory(dt) {
+  const beat = STORY[idx];
+  const u = Math.min(1, t / beat.dur);
+
+  // --- 摄影机：向这一幕的机位缓入（指数趋近，片子里是一条平滑的推轨）---
+  _p.set(...beat.cam.pos); _q.set(...beat.cam.tgt);
+  const k = 1 - Math.pow(0.02, dt);
+  camPos.lerp(_p, Math.min(1, k));
+  camTgt.lerp(_q, Math.min(1, k));
+  camera.position.copy(camPos);
+  camera.lookAt(camTgt);
+
+  // --- 修士动线 ---
+  if (beat.route) {
+    beat.s = (beat.s || 0) + beat.walk.speed * dt;
+    if (beat.s > beat.route.total) beat.s = beat.route.total;
+    const p = pointAt(beat.route, beat.s);
+    const who = beat.carry === 'cask' ? monkHaul : monkPick;
+    const ph = (beat.s / (beat.walk.speed * 1.2)) * Math.PI * 2;
+    place(who, p.x, p.z, p.heading, ph, true);
+    if (fxCart) {
+      // 车比人靠前一点（人在后面握着辕杆）：pointAt 取"人前方 1.35 m"那一点当车位
+      const q2 = pointAt(beat.route, Math.min(beat.route.total, beat.s + cartOffset));
+      cart.position.set(q2.x, 0, q2.z);
+      // pointAt 的 heading 以"模型面向 -z"为 0，车头在局部 +x → 差 π/2
+      cart.rotation.y = q2.heading + Math.PI / 2;
+      // 尘土跟着车走：出生点搬到**轮子两侧偏低处**，不是车尾正后方。
+      // 车尾正后方就是人站的地方，粒子从人腿边冒出来，在镜头里是一团白雾罩住人。
+      const hx = Math.sin(q2.heading), hz = -Math.cos(q2.heading);   // 车头方向
+      const px = -hz, pz = hx;                                        // 车的侧向
+      for (const o of fxMotes) {
+        const side = (Math.random() - 0.5) * 2;
+        o.userData.p0.set(
+          q2.x - hx * 0.15 + px * side * 0.9 + (Math.random() - 0.5) * 0.5, 0.1,
+          q2.z - hz * 0.15 + pz * side * 0.9 + (Math.random() - 0.5) * 0.5);
+      }
+    }
+  } else if (beat.stand) {
+    // 站着的那一幕（装箱）：抱着桶站在酒窖门外的巷子里，桶里的酒液随幕内进度涨上来。
+    // 站位与朝向由 brewStory() 给（stand），页面不另写坐标。
+    const who = monkHaul;
+    place(who, beat.stand.x, beat.stand.z, beat.stand.heading, t * 0.8, false);
+    const carried = who.userData.carry;
+    if (carried && carried.userData.fill) {
+      carried.userData.fill.scale.y = Math.max(0.02, Math.min(1.6, u * 2.2));
+      carried.userData.fill.position.y = -0.34 + (Math.min(1.6, u * 2.2) * 0.34) / 2;
+    }
+  }
+
+  // --- 粒子 ---
+  stepMotes(fxMotes, dt);
+
+  // --- 招牌灯 ---
+  if (fxSign) {
+    signLamp.visible = true;
+    const g = Math.min(1, Math.max(0, (u - 0.25) / 0.35));
+    signLamp.material.emissiveIntensity = 0.2 + g * 2.4;
+    signGlow.visible = g > 0.01;
+    signGlow.material.opacity = g * 0.5 * (0.9 + Math.sin(t * 3) * 0.1);
+  }
+
+  // --- 进度条 + 切幕 ---
+  let done = 0;
+  for (let i = 0; i < idx; i++) done += STORY[i].dur;
+  done += Math.min(t, beat.dur);
+  bar.style.width = (done / TOTAL * 100) + '%';
+
+  if (t >= beat.dur) {
+    if (idx < STORY.length - 1) goto(idx + 1);
+    else { playing = false; syncPlayBtn(); }
+  }
+  t += dt;
+}
+
+$('play').onclick = () => {
+  if (!playing && idx === STORY.length - 1 && t >= STORY[idx].dur) goto(0);
+  playing = !playing; syncPlayBtn();
+};
+$('replay').onclick = () => { goto(0); playing = true; syncPlayBtn(); };
+$('xray').onchange = () => {
+  xray = $('xray').checked;
+  autoXrayLocked = true;            // 手动拨过就不再自动切
+  applyXray();
+};
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
+  if (e.code === 'ArrowRight') { goto(idx + 1); }
+  if (e.code === 'ArrowLeft') { goto(idx - 1); }
+});
+
+goto(0);
+snapCam(STORY[0]);
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(0.05, clock.getDelta());
+  if (playing) stepStory(dt);
+  else {
+    // 暂停时镜头继续缓入到这一幕的机位（停在一个稳定好看的画面上）
+    _p.set(...STORY[idx].cam.pos); _q.set(...STORY[idx].cam.tgt);
+    camPos.lerp(_p, 0.06); camTgt.lerp(_q, 0.06);
+    camera.position.copy(camPos); camera.lookAt(camTgt);
+  }
+  renderer.render(scene, camera);
+});
+
+// ---------- 无头脚本用的钩子 ----------
+// 注意 __storyStep 是**不管播放状态都推进**的：截图/录像要的是"给定 dt 走一步"，
+// 如果里面还判 playing，脚本一暂停就每帧停在原地（出图十一张全一样）。
+window.__ready = true;
+window.__storyGoto = (i) => { goto(i); syncPlayBtn(); };
+window.__storyStep = (dt) => { stepStory(dt); return playing; };
+window.__storyPlay = () => { playing = true; syncPlayBtn(); };
+window.__storyPause = () => { playing = false; syncPlayBtn(); };
+window.__storyXray = (on) => {
+  xray = !!on;
+  autoXrayLocked = true;            // 手动拨过开关就交回控制权，别再自动切
+  $('xray').checked = xray; applyXray();
+};
+window.__storyDone = () => idx === STORY.length - 1 && t >= STORY[idx].dur;
+// 排查用：这一帧里到底有什么东西在哪。写故事页时最常见的"道具没出现"就是这里看出来的。
+window.__storyDebug = () => ({
+  beat: STORY[idx].id, t: +t.toFixed(2), fx: STORY[idx].fx,
+  cam: `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`,
+  goal: `${STORY[idx].cam.pos.join(',')}`,
+  cartVisible: cart.visible,
+  cart: `${cart.position.x.toFixed(1)},${cart.position.y.toFixed(1)},${cart.position.z.toFixed(1)}`,
+  pick: { v: monkPick.visible, p: `${monkPick.position.x.toFixed(1)},${monkPick.position.z.toFixed(1)}` },
+  haul: { v: monkHaul.visible, p: `${monkHaul.position.x.toFixed(1)},${monkHaul.position.z.toFixed(1)}` },
+  routeLen: STORY[idx].route ? +STORY[idx].route.total.toFixed(1) : null,
+  s: STORY[idx].s != null ? +STORY[idx].s.toFixed(1) : null,
+  motes: fxMotes.length,
+  inside: props.children.length,
+});
+window.__storyTotal = () => TOTAL;
+window.__storyBeat = () => STORY[idx].id;
+window.__cam = () => `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
+</script>

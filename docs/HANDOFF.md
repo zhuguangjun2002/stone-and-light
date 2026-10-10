@@ -24,14 +24,15 @@
 | 文件 | 职责 |
 |---|---|
 | `src/cathedral.js` | 总装：拉丁十字平面、三段式立面、屋面、耳堂、后殿、管风琴、光柱 |
-| `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 八建筑 + 服务巷 + 院子排水 `buildBreweryDrain` + **招牌 `cellarSign` / 储水塔 `waterTower` / 窑前麦场 `maltYard`**）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` |
+| `src/town.js` | 领地：回廊（含檐沟/落水管/明沟/暗管/渗井）、教士住宅、墓地、集市（摊棚+货台）、**酿酒坊大院**（`BREW` 八建筑 + 服务巷 + 院子排水 `buildBreweryDrain` + **招牌 `cellarSign` / 储水塔 `waterTower` / 窑前麦场 `maltYard`**）、**院内地面分级**；导出 `drainageInfo()` / `brewInfo()` / **`brewStory()`（小故事的台词·机位·动线）** |
+| `src/plantations.js` | 葡萄园与酒花圃；架式常量走 `VINE` 导出（演示页与故事动线取行间过道也从这儿取，不另抄行距） |
 | `src/main.js` | 入口：渲染/日照/环视/行走/剖面/标注/建造动画/面板；另有 **地下泥土层 + `addFoundations` 地基**（挂在 scene 不挂 root）；烘焙完成发 `window.__baked` |
 | `src/person.js` | 第三人称替身构造 `buildPerson()`（从 `main.js` 抽出）：长袍/斗篷/兜帽/里料袖、ArmL/ArmR/LegL/LegR 枢轴组、`userData` 存枢轴引用；导出 `poseWalk()` 摆臂（替身/NPC/monk.html 共用） |
 | `src/walkers.js` | 领地里的修士 NPC（`createWalkers()`）：7 位沿回廊/服务巷/集市/墓地动线行走；挂在 `scene` 只做视觉；导出 `WALKERS`/`buildRoute`/`pointAt` 供 `tools/check-npc.mjs` 校验 |
 | `src/gothic.js` | 尖拱、束柱、小尖塔、山墙、坡屋面、`wallWithOpenings` 开洞墙 |
 | `src/bake.js` / `bakeworker.js` / `grid.js` | 室内顶点色烘焙（Worker 并行 + IndexedDB 缓存 + 射线加速网格） |
 | `src/doors.js` / `glass.js` / `vault.js` / `buttress.js` / `facade.js` / `figure.js` / `materials.js` / `presets.js` / `tour.js` / `worksite.js` / `audio.js` | 各自构件/声音/导览/工地 |
-| `tools/` | 八个检查器（含 `check-brew.mjs` / **`check-gear.mjs`** / `check-shadow.mjs` / `check-npc.mjs`）+ **差分探针 `probe.mjs`**（把 check-zfight 的结果去重后写文件，两个状态 diff）+ 取景页（shot.html / shoot.mjs）+ **主站取景 shoot-main.mjs**（含 NPC，`--q=` 可透传任意 URL 参数如 `labels=1`）+ 两个水路演示（drainage.html / **brewery.html**）+ **酿造工序演示（brewprocess.html，两线九站）** + **人物自检（monk.html）** + 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）+ Blender 生成脚本（generate_monk.py → assets/monk.glb）|
+| `tools/` | 八个检查器（含 `check-brew.mjs` / **`check-gear.mjs`** / `check-shadow.mjs` / `check-npc.mjs`）+ **两个故事检查器：`check-story.mjs`（走线，与 check-npc 同一套 buildRoute/pointAt + 同一张碰撞网格）/ `check-shot.mjs`（机位视线，逐幕查"机位→目标有没有被实心东西挡住"）** + **差分探针 `probe.mjs`**（把 check-zfight 的结果去重后写文件，两个状态 diff）+ 取景页（shot.html / shoot.mjs）+ **主站取景 shoot-main.mjs**（含 NPC，`--q=` 可透传任意 URL 参数如 `labels=1`）+ **故事分镜 `shot-story.mjs`（`--beat=` / `--at=`）** + **故事录制 `record-story.mjs`（逐帧抓 `storyframes/`）** + 两个水路演示（drainage.html / **brewery.html**）+ **酿造工序演示（brewprocess.html，两线九站）** + **酿造小故事（story.html，十一幕）** + **人物自检（monk.html）** + 烘焙对照 + 导览录制（record-tour.mjs）+ 扩建方案图（expansion-plan.py）+ **Chrome 启动参数 `chrome-args.mjs`**（**默认本机 MX230**，`--swiftshader` 退回软渲染）+ Blender 生成脚本（generate_monk.py → assets/monk.glb）|
 | `test/smoke.mjs` | 无浏览器冒烟 |
 
 ## 领地接入的约定（重要）
@@ -72,7 +73,52 @@ node tools/check-npc.mjs            # 修士 NPC 走线 0 处蹭墙 / 0 处脚�
 
 ## 状态：已收尾（截至 2026-10-10）
 
-### 本轮：院里补三件"真实修道院也有"的家伙（招牌 / 储水塔 / 窑前麦场）
+### 本轮：把酒坊酿成「一个故事」——`tools/story.html` + `docs/story.mp4`
+
+`brewprocess.html` 是工序说明书，这一轮补的是**叙事**：十一幕，镜头从
+北头的葡萄园一路走到南头的酒肆，两条线（啤酒 / 葡萄酒）在酒肆那张桌子上
+合流——采摘 → 酿造 → 发酵 → 装箱 → 售卖 → 收尾，约 91 秒。左边可点任一幕
+跳过去，空格暂停，← → 切幕；`docs/story.mp4` 是录出来的版本。
+
+- **数据只有一份**：台词、机位、走位动线全在 `src/town.js` 的 **`brewStory()`**
+  里，与 `BREW` 表、`brewInfo().process` 同源；房子挪了位置，机位跟着
+  `inhouse()` 重算（depth / dz 两个可调项，注释里写清了为什么非得有这两个）。
+  葡萄园的行间过道取自 **`src/plantations.js` 新导出的 `VINE`**（架式常量，
+  不在 town.js 里另抄一份行距）。
+- **不造场景里已经有的东西**：葡萄架、采收筐、压榨机、冷却浅盘、橡木桶、
+  陶瓮、巷口招牌 `src/` 里全都有了，再造一份只会穿帮。这页只加三类——
+  走位的修士（`buildPerson()` + `poseWalk()`，与领地 NPC、monk.html 同一套）、
+  修士手里拎的（筐 / 袋 / 桶，挂在人身上不落地）、以及粒子（葡萄 / 蒸汽 /
+  泡沫 / 酒液）。屋里那五幕靠**镜头 + 高亮真器具 + 粒子**讲。
+- **两个新检查器**（都静态、无浏览器）：
+  - `node tools/check-story.mjs` —— 故事动线（与 check-npc 同一套
+    `buildRoute`/`pointAt` + 同一张碰撞网格），当前 3 条动线 / 204 个采样点全通。
+  - `node tools/check-shot.mjs` —— 逐幕查「机位 → 目标」之间有没有被实心东西
+    挡住。机位是从房屋尺寸**现算**的，房子一挪就可能正对着墙；片子里的表现是
+    「镜头一推过去就是一堵墙」，而在浏览器里很难看出错在哪儿。
+    打到目标**自己**（离目标 0.6 m 以内）不算挡——「招牌」那一幕就是冲着匾去的。
+- **踩过的坑（都在代码注释里）**：
+  - 粮车绕院子走是错的——粮仓门朝**西**对着巷子，车停在门的背面故事就讲不通；
+    而且 z = −35 那条直线上压榨房占着，得先走到两房之间 z ≈ −31 的缝再拐进巷子。
+  - **speed × dur 必须 ≥ 折线长**：车开进画面只能发生在最后那截巷子里，
+    第一版 1.6 m/s × 9 s = 14.4 m，整段都在院子东边被粮仓挡着。
+  - 粒子 `o.scale.setScalar(...)` 会把传进来的 size 冲掉——0.13 m 的尘土
+    全部变成 1 m，一团白雾罩住整辆车；改成乘 `d.size`。
+  - 录片前必须 `__storyPause()`：页面自己的 rAF 循环会按真实时间推进故事，
+    与逐帧的 `__storyStep()` 叠加就是二倍速（91 s 的片 45 s 就「演完」）。
+  - 屋里五幕的机位**在屋里**，透视一律关着：开着 xray 反而把镜头背后的墙也
+    变透明，整个画面被外面的院子冲淡成一片灰蓝（灌桶那幕最明显）。
+- **录片**：`node tools/record-story.mjs`（默认 GPU，约 12 fps）→
+  `storyframes/`，再 `ffmpeg -framerate 24 -i storyframes/f%05d.jpg -c:v
+  libx264 -pix_fmt yuv420p -crf 24 docs/story.mp4`。分镜截图
+  `node tools/shot-story.mjs`（`--beat=` 只拍某几幕、`--at=` 指定幕内第几秒，
+  循环里判停 + 上限压到幕末前一帧，不判就串幕）。
+  当前 `docs/story.mp4`：960×540 / 12 fps / crf 24 = **1.6 MiB**
+  （Pages 25 MiB 上限的 6%）。
+- **复跑**：故事两检查器全绿；主站八个检查器基线不变（故事页的道具挂在
+  `scene` 上、不进 `root`，与 walkers 同一个理由）。
+
+### 上一轮：院里补三件"真实修道院也有"的家伙（招牌 / 储水塔 / 窑前麦场）
 
 三件都对应 `docs/brewery-research.md`「后续可放的空间」与 `docs/wine-research.md`
 实测表末行记着的那几条没做的条目。**坐标与做法都现算，落位先实测空地**：

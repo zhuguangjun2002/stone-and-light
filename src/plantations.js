@@ -46,10 +46,26 @@ function balls(geo, mat, items) {
 // **行的起点 z=-65.5 是被挤出来的**：葡萄酒窖北墙在 z=-62，留 3.5 m 当运葡萄的步道，
 // 行再往西就撞墙了（原先 z 起点 -60.5，加了葡萄酒窖之后正好穿过它）。
 // 地面原来是裸广场，由 buildGround() 补草地。
+// 葡萄园的架式常量：几何照它建，演示页 / 故事动线也照它取点（单一来源）。
+// buildVineyard() 一跑就把下面的字段填上；想直接读、不建场景的用法（比如文档或
+// 手算）可以自己按注释里的数算，但**别再抄一份**——行距一改这里就跟着改。
+const VINE = {
+  ROWS: 5, Z0: -65.5, PITCH_Z: 2.8, X0: 57.5, X1: 72.5, PITCH_X: 2.5,
+  laneZ: -65.5 - 2.8 / 2,          // 第一、二行之间的过道
+  cx: 65, cz: -65.5 - 4 * 1.4,      // 5 行的中心
+};
+
 function buildVineyard(mats, rnd) {
   const g = new THREE.Group();
   const ROWS = 5, Z0 = -65.5, PITCH_Z = 2.8;
   const X0 = 57.5, X1 = 72.5, PITCH_X = 2.5;
+  VINE.ROWS = ROWS; VINE.Z0 = Z0; VINE.PITCH_Z = PITCH_Z;
+  VINE.X0 = X0; VINE.X1 = X1; VINE.PITCH_X = PITCH_X;
+  // 行间过道（人在园里干活要走的地方）：取第一、二行正中间。
+  // 贴着行走会蹭到铁丝与果串——tools/check-story.mjs 实测 0.05 m，所以留出行距的一半。
+  VINE.laneZ = Z0 - PITCH_Z / 2;
+  VINE.cx = (X0 + X1) / 2;
+  VINE.cz = (Z0 + Z0 - (ROWS - 1) * PITCH_Z) / 2;
   const stakeG = new THREE.BoxGeometry(0.09, 1.9, 0.09);
   // 果粒：低面二十面体，半径 0.07。**不能再小**——0.05 时在阴影里只剩几个像素点，
   // 远看整片园子"没有果子"，那正是要解决的问题。颜色也提亮一档（见 town.js 的 grape）。
@@ -135,4 +151,4 @@ function buildHopYard(mats, rnd) {
   return g;
 }
 
-export { buildVineyard, buildHopYard };
+export { buildVineyard, buildHopYard, VINE };

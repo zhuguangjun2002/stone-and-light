@@ -49,6 +49,29 @@ python3 -m http.server 8123
 全部来自 `brewInfo().process`，与 `BREW` 表和器具几何同一份数据；屋子能分组点亮是因为
 `buildBrewery()` 给每座房子挂了 `userData.brewKey`。
 
+**酿造小故事**：`tools/story.html`（<http://localhost:8123/tools/story.html>）·
+`docs/story.mp4`。上面那页是"工序说明书"，这一页是**一条故事**：
+十一幕，镜头从北头的葡萄园一路走到南头的酒肆，两条线在同一张桌子上合流——
+采摘 → 酿造 → 发酵 → 装箱 → 售卖 → 收尾，约 91 秒。左边可点任一幕跳过去，
+空格暂停，← → 切幕。
+
+- **取材原则**：不造场景里已经有的东西。葡萄架、采收筐、压榨机、冷却浅盘、橡木桶、
+  陶瓮、巷口招牌都已经在 `src/` 里了，再造一份只会穿帮。这页只加三类——
+  走位的修士（`buildPerson()` + `poseWalk()`，与领地 NPC、monk.html 同一套）、
+  修士手里拎的（筐 / 袋 / 桶，挂在人身上不落地）、以及粒子（葡萄 / 蒸汽 / 泡沫 / 酒液）。
+  屋里的工序靠**镜头 + 高亮真器具 + 粒子**来讲。
+- **数据只有一份**：台词、机位、走位动线全在 `src/town.js` 的 `brewStory()` 里，
+  与 `BREW` 表、`brewInfo().process` 同源；房子挪了位置机位跟着重算。
+- **两个检查器**（新加，都静态无浏览器）：
+  `node tools/check-story.mjs` 走一遍故事动线（与 check-npc 同一套 `buildRoute`/`pointAt`
+  和同一张碰撞网格），`node tools/check-shot.mjs` 查每一幕的机位到目标之间有没有被实心
+  东西挡住——机位是从房屋尺寸**现算**的，房子一挪就可能正对着墙，片子里的表现是"镜头一推
+  过去就是一堵墙"，而在浏览器里很难看出是哪儿错了。
+- **录成视频**：`node tools/record-story.mjs`（逐帧抓到 `storyframes/`，默认 GPU），
+  再 `ffmpeg -framerate 24 -i storyframes/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 24
+  docs/story.mp4`。分镜截图用 `node tools/shot-story.mjs`（`--beat=` 只拍某几幕、
+  `--at=` 指定幕内第几秒）。
+
 **人物自检页**：`tools/monk.html`（<http://localhost:8123/tools/monk.html>）。
 把行走模式里那位第三人称替身站到一个铺石板的院落里，正/侧/背/全身/四分之三多角度
 的机位，并可以切成 `assets/monk.glb`（Blender 无头脚本 `tools/generate_monk.py`
@@ -154,10 +177,14 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 25 t
 > 已占到上限的 96%**，太满；改用 **crf 25 = 20.2 MiB（81%）**，对原帧 PSNR 只掉 0.3 dB
 > （39.4 → 39.1 dB，反正上限是 JPEG 源帧本身）。改镜头/加细节后重录，
 > 记得看一眼 `du -h docs/tour.mp4` 别超 25 MiB。
+>
+> `docs/story.mp4`（酿造小故事，91 s）用的是同一套流程，但体量小得多：
+> 960×540 / 12 fps / crf 24 = **1.6 MiB**，是 25 MiB 上限的 6%，随便放。
 
 ## 测试与检查
 
-八个检查器各查一类问题，当前基线（每次改几何都该重跑一遍）：
+八个检查器查主站的几何，另有两个查故事页（见「酿造小故事」一节），当前基线
+（每次改几何都该重跑一遍）：
 
 | 查什么 | 工具 | 当前 |
 |---|---|---|
@@ -169,6 +196,8 @@ ffmpeg -framerate 24 -i frames/f%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 25 t
 | 酒坊屋内陈设出不出屋 / 堵不堵门 | `check-gear.mjs` | 八座共 **381 件**，**0 件**出屋 / 顶穿屋面 / 沉到地下；**门口净空 8/8**（门洞无物、中线净深 ≥ 2 m、可达 ≥ 20%） |
 | 阴影视锥罩得住吗 | `check-shadow.mjs` | 太阳走一天 **0 处**越界（7.3 cm/px） |
 | 修士 NPC 走线通不通 | `check-npc.mjs` | 7 位修士走一圈，**0 处**蹭墙 / 脚不沾地 |
+| 故事里修士走线通不通 | `check-story.mjs` | 3 条故事动线、204 个采样点，**0 处**蹭墙 / 脚不沾地 |
+| 故事每一幕看得见吗 | `check-shot.mjs` | 11 幕机位→目标，**0 幕**被实心东西挡住 |
 
 ```bash
 node test/smoke.mjs          # 无浏览器构建整个场景图，校验网格数与总高

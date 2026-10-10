@@ -75,6 +75,10 @@
   集市摊点里做一块虚设的 Abdij 货台作为对照。**仍未做。**
 - **葡萄酒那一半线**（葡萄园 / 压榨房 / 葡萄酒窖）在另一份调研里：
   见 `docs/wine-research.md`；两条线的施工单在 `docs/brew-plan.md`。
+- **两条线合起来的故事**：`tools/story.html` 与 `docs/story.mp4`
+  （十一幕：采摘 → 酿造 → 发酵 → 装箱 → 售卖 → 收尾）。
+  台词与机位在 `src/town.js` 的 `brewStory()`，与 `BREW` 表同源；
+  动线用 `tools/check-story.mjs` 校验（与 check-npc 同一套路由与碰撞网格）。
 
 ## 引用
 
